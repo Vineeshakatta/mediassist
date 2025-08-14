@@ -2,7 +2,7 @@
 
 ## Overview
 
-This is a Streamlit-based web application that analyzes medical reports and health documents using AI-powered analysis. The application allows users to upload various file formats (PDFs, images, text files) containing health information and provides automated analysis including key metric extraction, health summaries, concerns identification, and personalized recommendations. The system uses OpenAI's API for intelligent analysis combined with regex-based pattern matching for extracting common health metrics like blood pressure, cholesterol levels, glucose readings, and vital signs.
+This is a comprehensive Streamlit-based health dashboard application that analyzes medical reports and health documents using AI-powered analysis. The application features a complete multi-page dashboard with sidebar navigation, allowing users to upload various file formats (PDFs, images, text files) containing health information and provides automated analysis including key metric extraction, health summaries, concerns identification, and personalized recommendations. The system uses OpenAI's API for intelligent analysis combined with regex-based pattern matching for extracting common health metrics like blood pressure, cholesterol levels, glucose readings, and vital signs.
 
 ## User Preferences
 
@@ -11,10 +11,11 @@ Preferred communication style: Simple, everyday language.
 ## System Architecture
 
 ### Frontend Architecture
-- **Framework**: Streamlit web application framework
-- **Layout**: Wide layout with expandable sidebar for instructions
-- **Components**: File upload interface, privacy notices, results display sections
-- **User Experience**: Single-page application with real-time processing and feedback
+- **Framework**: Streamlit web application framework with multi-page dashboard
+- **Navigation**: Left sidebar navigation with 6 main sections (Dashboard, Report Analysis, Report Summary, Query Assistant, Insurance Claims, Health History)
+- **Layout**: Wide layout with persistent sidebar navigation and session state management
+- **Components**: Dashboard overview cards, interactive chat interface, file upload system, timeline views, insurance claim generators
+- **User Experience**: Multi-page application with persistent data across sessions, real-time processing, and comprehensive analytics
 
 ### Backend Architecture
 - **Core Processing Pipeline**: Three-layer architecture with specialized processors

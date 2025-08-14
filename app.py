@@ -3,6 +3,9 @@ import os
 from health_analyzer import HealthAnalyzer
 from file_processor import FileProcessor
 import tempfile
+import json
+from datetime import datetime
+import pandas as pd
 
 # Configure page
 st.set_page_config(
@@ -13,45 +16,152 @@ st.set_page_config(
 )
 
 def main():
-    st.title("🏥 Health Report Analyzer")
-    st.markdown("Upload your medical reports for AI-powered analysis and summaries")
+    # Initialize session state
+    if 'current_page' not in st.session_state:
+        st.session_state.current_page = 'dashboard'
+    if 'reports_history' not in st.session_state:
+        st.session_state.reports_history = []
+    if 'health_data' not in st.session_state:
+        st.session_state.health_data = {}
     
-    # Privacy notice
-    with st.expander("📋 Privacy & Data Usage Notice", expanded=False):
-        st.markdown("""
-        **Your Privacy Matters:**
-        - Your health reports are processed securely and temporarily
-        - No data is permanently stored on our servers
-        - Files are automatically deleted after processing
-        - Analysis is performed using encrypted connections
-        - We do not share your health information with third parties
-        
-        **Disclaimer:** This tool provides general information only and should not replace professional medical advice.
-        Always consult with healthcare professionals for medical decisions.
-        """)
-    
-    # Sidebar for instructions
+    # Sidebar Navigation
     with st.sidebar:
-        st.header("📖 Instructions")
-        st.markdown("""
-        **Supported Formats:**
-        - PDF documents
-        - Images (JPG, PNG, etc.)
-        - Text files
+        st.title("🏥 Health Hub")
+        st.markdown("---")
         
-        **What we analyze:**
-        - Blood pressure readings
-        - Cholesterol levels
-        - Blood glucose levels
-        - Lab test results
-        - Vital signs
-        - General health metrics
+        # Navigation Menu
+        pages = {
+            'dashboard': '📊 Dashboard',
+            'upload': '📁 Report Analysis',
+            'summary': '📋 Report Summary', 
+            'assistant': '🤖 Query Assistant',
+            'insurance': '🏛️ Insurance Claims',
+            'history': '📚 Health History'
+        }
         
-        **Tips:**
-        - Ensure text is clearly visible
-        - Upload complete reports
-        - Check image quality for OCR
-        """)
+        for page_key, page_name in pages.items():
+            if st.button(page_name, key=f"nav_{page_key}", use_container_width=True):
+                st.session_state.current_page = page_key
+        
+        st.markdown("---")
+        
+        # Quick Stats
+        st.subheader("Quick Stats")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Reports", len(st.session_state.reports_history))
+        with col2:
+            st.metric("This Month", len([r for r in st.session_state.reports_history if r.get('date', '').startswith(datetime.now().strftime('%Y-%m'))]))
+        
+        # Privacy notice
+        with st.expander("📋 Privacy Notice", expanded=False):
+            st.markdown("""
+            **Your Privacy Matters:**
+            - Reports processed securely and temporarily
+            - No permanent data storage
+            - Files auto-deleted after processing
+            - Encrypted connections only
+            
+            **Disclaimer:** For informational purposes only. 
+            Always consult healthcare professionals.
+            """)
+    
+    # Main Content Area
+    if st.session_state.current_page == 'dashboard':
+        show_dashboard()
+    elif st.session_state.current_page == 'upload':
+        show_upload_page()
+    elif st.session_state.current_page == 'summary':
+        show_summary_page()
+    elif st.session_state.current_page == 'assistant':
+        show_assistant_page()
+    elif st.session_state.current_page == 'insurance':
+        show_insurance_page()
+    elif st.session_state.current_page == 'history':
+        show_history_page()
+    
+def show_dashboard():
+    """Main dashboard page"""
+    st.title("📊 Health Dashboard")
+    st.markdown("Welcome to your personal health analytics center")
+    
+    # Overview Cards
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric(
+            label="Total Reports", 
+            value=len(st.session_state.reports_history),
+            delta="All time"
+        )
+    
+    with col2:
+        recent_reports = len([r for r in st.session_state.reports_history 
+                             if r.get('date', '').startswith(datetime.now().strftime('%Y-%m'))])
+        st.metric(
+            label="This Month", 
+            value=recent_reports,
+            delta=f"{recent_reports} new"
+        )
+    
+    with col3:
+        concerns = sum(len(r.get('concerns', [])) for r in st.session_state.reports_history)
+        st.metric(
+            label="Total Concerns",
+            value=concerns,
+            delta="Flagged items"
+        )
+    
+    with col4:
+        st.metric(
+            label="Health Score",
+            value="Good" if concerns < 3 else "Monitor",
+            delta="Overall status"
+        )
+    
+    st.markdown("---")
+    
+    # Recent Activity
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.subheader("📈 Recent Analysis")
+        if st.session_state.reports_history:
+            # Show last 5 reports
+            recent = st.session_state.reports_history[-5:]
+            for report in reversed(recent):
+                with st.expander(f"📄 {report.get('filename', 'Unknown')} - {report.get('date', 'Unknown date')}"):
+                    st.write(f"**Summary:** {report.get('summary', 'No summary available')[:200]}...")
+                    if report.get('concerns'):
+                        st.warning(f"Concerns: {len(report['concerns'])} items flagged")
+        else:
+            st.info("No reports analyzed yet. Upload your first health report to get started!")
+            if st.button("📁 Upload First Report"):
+                st.session_state.current_page = 'upload'
+                st.rerun()
+    
+    with col2:
+        st.subheader("🎯 Quick Actions")
+        if st.button("📁 Analyze New Report", use_container_width=True):
+            st.session_state.current_page = 'upload'
+            st.rerun()
+        
+        if st.button("🤖 Ask Health Question", use_container_width=True):
+            st.session_state.current_page = 'assistant'
+            st.rerun()
+        
+        if st.button("📋 View Summary", use_container_width=True):
+            st.session_state.current_page = 'summary'
+            st.rerun()
+        
+        if st.button("🏛️ Insurance Claims", use_container_width=True):
+            st.session_state.current_page = 'insurance'
+            st.rerun()
+
+def show_upload_page():
+    """Upload and analysis page (original functionality)"""
+    st.title("📁 Health Report Analysis")
+    st.markdown("Upload your medical reports for AI-powered analysis and summaries")
     
     # Initialize processors
     if 'health_analyzer' not in st.session_state:
@@ -113,7 +223,7 @@ def main():
                         os.unlink(tmp_file_path)
                     
                     # Display results
-                    display_analysis_results(analysis_result, extracted_text)
+                    display_analysis_results(analysis_result, extracted_text, uploaded_file.name)
                     
             except Exception as e:
                 st.error(f"❌ Error processing file: {str(e)}")
@@ -123,8 +233,20 @@ def main():
                     except:
                         pass
 
-def display_analysis_results(analysis_result, extracted_text):
+def display_analysis_results(analysis_result, extracted_text, filename):
     """Display the analysis results in a structured format"""
+    
+    # Save to history
+    report_data = {
+        'filename': filename,
+        'date': datetime.now().strftime('%Y-%m-%d %H:%M'),
+        'summary': analysis_result.get('summary', ''),
+        'concerns': analysis_result.get('concerns', []),
+        'recommendations': analysis_result.get('recommendations', []),
+        'metrics': analysis_result.get('metrics', []),
+        'extracted_text': extracted_text
+    }
+    st.session_state.reports_history.append(report_data)
     
     st.success("✅ Analysis Complete!")
     
@@ -217,6 +339,299 @@ Disclaimer: This analysis is for informational purposes only and should not repl
         file_name="health_analysis_summary.txt",
         mime="text/plain"
     )
+
+def show_summary_page():
+    """Report summary page"""
+    st.title("📋 Report Summary")
+    st.markdown("Overview of all your analyzed health reports")
+    
+    if not st.session_state.reports_history:
+        st.info("No reports analyzed yet. Go to Report Analysis to upload your first report.")
+        if st.button("📁 Analyze First Report"):
+            st.session_state.current_page = 'upload'
+            st.rerun()
+        return
+    
+    # Summary Statistics
+    col1, col2, col3 = st.columns(3)
+    
+    total_concerns = sum(len(r.get('concerns', [])) for r in st.session_state.reports_history)
+    total_recommendations = sum(len(r.get('recommendations', [])) for r in st.session_state.reports_history)
+    
+    with col1:
+        st.metric("Total Reports", len(st.session_state.reports_history))
+    with col2:
+        st.metric("Total Concerns", total_concerns)
+    with col3:
+        st.metric("Total Recommendations", total_recommendations)
+    
+    st.markdown("---")
+    
+    # Detailed Report List
+    st.subheader("📊 All Reports")
+    
+    for i, report in enumerate(reversed(st.session_state.reports_history)):
+        with st.expander(f"📄 {report['filename']} - {report['date']}"):
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                st.markdown("**Summary:**")
+                st.write(report['summary'])
+                
+                if report['concerns']:
+                    st.markdown("**⚠️ Concerns:**")
+                    for concern in report['concerns']:
+                        st.write(f"• {concern}")
+                
+                if report['recommendations']:
+                    st.markdown("**💡 Recommendations:**")
+                    for rec in report['recommendations']:
+                        st.write(f"• {rec}")
+            
+            with col2:
+                st.markdown("**📈 Key Metrics:**")
+                if report['metrics']:
+                    for metric in report['metrics']:
+                        st.write(f"**{metric.get('name', 'Unknown')}:** {metric.get('value', 'N/A')}")
+                else:
+                    st.write("No specific metrics extracted")
+
+def show_assistant_page():
+    """Query assistant page"""
+    st.title("🤖 Health Query Assistant")
+    st.markdown("Ask questions about your health reports and get AI-powered insights")
+    
+    if 'health_analyzer' not in st.session_state:
+        st.session_state.health_analyzer = HealthAnalyzer()
+    
+    if 'chat_history' not in st.session_state:
+        st.session_state.chat_history = []
+    
+    # Display chat history
+    for message in st.session_state.chat_history:
+        with st.chat_message(message["role"]):
+            st.write(message["content"])
+    
+    # Chat input
+    if prompt := st.chat_input("Ask a question about your health reports..."):
+        # Add user message
+        st.session_state.chat_history.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.write(prompt)
+        
+        # Generate AI response
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                # Prepare context from reports
+                context = ""
+                if st.session_state.reports_history:
+                    context = "Based on your health reports:\n"
+                    for report in st.session_state.reports_history[-3:]:  # Last 3 reports
+                        context += f"\nReport: {report['filename']}\n"
+                        context += f"Summary: {report['summary']}\n"
+                        if report['concerns']:
+                            context += f"Concerns: {', '.join(report['concerns'])}\n"
+                
+                try:
+                    response = st.session_state.health_analyzer.client.chat.completions.create(
+                        model="gpt-4o",
+                        messages=[
+                            {
+                                "role": "system", 
+                                "content": f"""You are a health assistant. Answer questions about the user's health reports in a helpful, informative way. Always remind users to consult healthcare professionals for medical decisions.
+                                
+                                Context from user's reports:
+                                {context}"""
+                            },
+                            {"role": "user", "content": prompt}
+                        ],
+                        max_tokens=500
+                    )
+                    
+                    ai_response = response.choices[0].message.content
+                    st.write(ai_response)
+                    
+                    # Add to chat history
+                    st.session_state.chat_history.append({"role": "assistant", "content": ai_response})
+                    
+                except Exception as e:
+                    error_msg = f"Sorry, I couldn't process your question: {str(e)}"
+                    st.write(error_msg)
+                    st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
+    
+    # Clear chat button
+    if st.button("🗑️ Clear Chat History"):
+        st.session_state.chat_history = []
+        st.rerun()
+
+def show_insurance_page():
+    """Insurance claims page"""
+    st.title("🏛️ Insurance Claims Assistant")
+    st.markdown("Generate insurance claim summaries from your health reports")
+    
+    if not st.session_state.reports_history:
+        st.info("No reports available for insurance claims. Upload health reports first.")
+        if st.button("📁 Upload Reports"):
+            st.session_state.current_page = 'upload'
+            st.rerun()
+        return
+    
+    st.subheader("📋 Generate Claim Summary")
+    
+    # Report selection
+    report_options = [f"{r['filename']} ({r['date']})" for r in st.session_state.reports_history]
+    selected_reports = st.multiselect(
+        "Select reports for claim:",
+        report_options,
+        help="Choose one or more reports to include in your insurance claim"
+    )
+    
+    if selected_reports and st.button("📄 Generate Claim Summary"):
+        with st.spinner("Generating insurance claim summary..."):
+            # Get selected report data
+            selected_indices = [report_options.index(r) for r in selected_reports]
+            claim_reports = [st.session_state.reports_history[i] for i in selected_indices]
+            
+            # Combine report data
+            combined_summaries = []
+            for r in claim_reports:
+                concerns_text = ', '.join(r['concerns']) if r['concerns'] else 'None'
+                
+                metrics_list = []
+                if r['metrics']:
+                    for m in r['metrics']:
+                        name = m.get('name', 'Unknown')
+                        value = m.get('value', 'N/A')
+                        metrics_list.append(f"{name}: {value}")
+                metrics_text = ', '.join(metrics_list) if metrics_list else 'None'
+                
+                report_summary = (
+                    f"Report: {r['filename']} (Date: {r['date']})\n"
+                    f"Summary: {r['summary']}\n"
+                    f"Key Concerns: {concerns_text}\n"
+                    f"Metrics: {metrics_text}"
+                )
+                combined_summaries.append(report_summary)
+            
+            combined_summary = "\n\n".join(combined_summaries)
+            
+            # Generate claim summary
+            claim_summary = f"""
+INSURANCE CLAIM SUMMARY
+Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+
+PATIENT REPORTS SUMMARY:
+{combined_summary}
+
+CLAIM JUSTIFICATION:
+Based on the medical reports provided, this claim is supported by documented health concerns and medical findings. The reports show specific health metrics and professional medical analysis that justify the need for insurance coverage.
+
+SUPPORTING DOCUMENTATION:
+- {len(claim_reports)} medical report(s) analyzed
+- AI-powered analysis confirming health concerns
+- Documented metrics and recommendations
+
+Please review the attached medical reports for complete clinical details.
+
+---
+Note: This summary is generated for insurance claim purposes. All medical decisions should be made in consultation with qualified healthcare professionals.
+            """
+            
+            st.success("✅ Claim Summary Generated!")
+            st.text_area("Insurance Claim Summary:", value=claim_summary, height=400)
+            
+            # Download button
+            st.download_button(
+                label="📥 Download Claim Summary",
+                data=claim_summary,
+                file_name=f"insurance_claim_summary_{datetime.now().strftime('%Y%m%d')}.txt",
+                mime="text/plain"
+            )
+
+def show_history_page():
+    """Health history page"""
+    st.title("📚 Health History")
+    st.markdown("Comprehensive view of your health journey over time")
+    
+    if not st.session_state.reports_history:
+        st.info("No health history available. Upload reports to start tracking your health journey.")
+        if st.button("📁 Upload First Report"):
+            st.session_state.current_page = 'upload'
+            st.rerun()
+        return
+    
+    # Timeline view
+    st.subheader("📈 Health Timeline")
+    
+    # Sort reports by date
+    sorted_reports = sorted(st.session_state.reports_history, key=lambda x: x['date'], reverse=True)
+    
+    for report in sorted_reports:
+        with st.container():
+            col1, col2 = st.columns([1, 3])
+            
+            with col1:
+                st.markdown(f"**{report['date']}**")
+                st.markdown(f"📄 {report['filename']}")
+            
+            with col2:
+                # Health status indicator
+                concern_count = len(report.get('concerns', []))
+                if concern_count == 0:
+                    st.success("✅ No concerns identified")
+                elif concern_count <= 2:
+                    st.warning(f"⚠️ {concern_count} concern(s) to monitor")
+                else:
+                    st.error(f"🚨 {concern_count} concerns requiring attention")
+                
+                # Key metrics summary
+                if report['metrics']:
+                    st.markdown("**Key Metrics:**")
+                    metric_text = ", ".join([f"{m.get('name', 'Unknown')}: {m.get('value', 'N/A')}" for m in report['metrics'][:3]])
+                    st.markdown(metric_text)
+                
+                # Quick summary
+                summary_preview = report['summary'][:150] + "..." if len(report['summary']) > 150 else report['summary']
+                st.markdown(f"**Summary:** {summary_preview}")
+            
+            st.markdown("---")
+    
+    # Health trends (if multiple reports)
+    if len(sorted_reports) > 1:
+        st.subheader("📊 Health Trends")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("**Concern Trends:**")
+            concern_counts = [len(r.get('concerns', [])) for r in reversed(sorted_reports)]
+            dates = [r['date'][:10] for r in reversed(sorted_reports)]  # Just date part
+            
+            if concern_counts:
+                trend_data = pd.DataFrame({
+                    'Date': dates,
+                    'Concerns': concern_counts
+                })
+                st.line_chart(trend_data.set_index('Date'))
+        
+        with col2:
+            st.markdown("**Recent Patterns:**")
+            
+            # Most common concerns
+            all_concerns = []
+            for report in sorted_reports:
+                all_concerns.extend(report.get('concerns', []))
+            
+            if all_concerns:
+                concern_counts = {}
+                for concern in all_concerns:
+                    concern_counts[concern] = concern_counts.get(concern, 0) + 1
+                
+                st.markdown("**Most Common Concerns:**")
+                for concern, count in sorted(concern_counts.items(), key=lambda x: x[1], reverse=True)[:5]:
+                    st.write(f"• {concern} ({count}x)")
+            else:
+                st.info("No recurring concerns identified")
 
 if __name__ == "__main__":
     main()
