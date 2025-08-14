@@ -9,8 +9,8 @@ import pandas as pd
 
 # Configure page
 st.set_page_config(
-    page_title="Health Report Analyzer",
-    page_icon="🏥",
+    page_title="MediAssist AI",
+    page_icon="🩺",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -26,16 +26,22 @@ def main():
     
     # Sidebar Navigation
     with st.sidebar:
-        st.title("🏥 Health Hub")
+        # Logo and branding
+        st.markdown("""
+        <div style='text-align: center; padding: 1rem 0;'>
+            <h1 style='color: #1f77b4; margin: 0; font-size: 1.8rem;'>🩺 MediAssist AI</h1>
+            <p style='color: #666; margin: 0; font-size: 0.85rem; font-style: italic;'>healthcare intelligence platform</p>
+        </div>
+        """, unsafe_allow_html=True)
         st.markdown("---")
         
-        # Navigation Menu
+        # Navigation Menu with icons
         pages = {
             'dashboard': '📊 Dashboard',
-            'upload': '📁 Report Analysis',
-            'summary': '📋 Report Summary', 
+            'upload': '📋 Report Analysis',
+            'summary': '📈 Report Summary', 
             'assistant': '🤖 Query Assistant',
-            'insurance': '🏛️ Insurance Claims',
+            'insurance': '💼 Insurance Claims',
             'history': '📚 Health History'
         }
         
@@ -45,13 +51,19 @@ def main():
         
         st.markdown("---")
         
-        # Quick Stats
-        st.subheader("Quick Stats")
+        # Quick Stats with icons
+        st.subheader("📊 Quick Stats")
         col1, col2 = st.columns(2)
         with col1:
-            st.metric("Reports", len(st.session_state.reports_history))
+            st.metric("📄 Reports", len(st.session_state.reports_history))
         with col2:
-            st.metric("This Month", len([r for r in st.session_state.reports_history if r.get('date', '').startswith(datetime.now().strftime('%Y-%m'))]))
+            recent_reports = len([r for r in st.session_state.reports_history if r.get('date', '').startswith(datetime.now().strftime('%Y-%m'))])
+            st.metric("📅 This Month", recent_reports)
+        
+        # Health Score with trend
+        health_score, trend = calculate_health_score(st.session_state.reports_history)
+        trend_icon = "📈" if trend == "up" else "📉" if trend == "down" else "📊"
+        st.metric(f"{trend_icon} Health Score", f"{health_score}%", delta=trend.capitalize() if trend != "neutral" else "Stable")
         
         # Privacy notice
         with st.expander("📋 Privacy Notice", expanded=False):
@@ -80,44 +92,157 @@ def main():
     elif st.session_state.current_page == 'history':
         show_history_page()
     
+def calculate_health_score(reports_history):
+    """Calculate health score based on reports and concerns"""
+    if not reports_history:
+        return 85, "neutral"  # Default score for new users
+    
+    # Base score calculation
+    total_reports = len(reports_history)
+    total_concerns = sum(len(r.get('concerns', [])) for r in reports_history)
+    
+    # Calculate base score (higher is better)
+    if total_concerns == 0:
+        base_score = 95
+    elif total_concerns <= total_reports:
+        base_score = 85
+    elif total_concerns <= total_reports * 2:
+        base_score = 70
+    else:
+        base_score = 55
+    
+    # Calculate trend if we have multiple reports
+    if len(reports_history) >= 2:
+        # Compare recent vs older reports
+        recent_reports = reports_history[-2:]  # Last 2 reports
+        older_reports = reports_history[:-2] if len(reports_history) > 2 else []
+        
+        recent_concern_rate = sum(len(r.get('concerns', [])) for r in recent_reports) / len(recent_reports)
+        
+        if older_reports:
+            older_concern_rate = sum(len(r.get('concerns', [])) for r in older_reports) / len(older_reports)
+            
+            if recent_concern_rate < older_concern_rate:
+                trend = "up"
+                base_score += 5  # Bonus for improvement
+            elif recent_concern_rate > older_concern_rate:
+                trend = "down"
+                base_score -= 5  # Penalty for decline
+            else:
+                trend = "neutral"
+        else:
+            trend = "neutral"
+    else:
+        trend = "neutral"
+    
+    # Ensure score is within bounds
+    health_score = max(0, min(100, base_score))
+    
+    return health_score, trend
+
 def show_dashboard():
     """Main dashboard page"""
     st.title("📊 Health Dashboard")
     st.markdown("Welcome to your personal health analytics center")
     
-    # Overview Cards
+    # Overview Cards with enhanced metrics
     col1, col2, col3, col4 = st.columns(4)
     
+    # Calculate metrics
+    total_reports = len(st.session_state.reports_history)
+    recent_reports = len([r for r in st.session_state.reports_history 
+                         if r.get('date', '').startswith(datetime.now().strftime('%Y-%m'))])
+    concerns = sum(len(r.get('concerns', [])) for r in st.session_state.reports_history)
+    health_score, trend = calculate_health_score(st.session_state.reports_history)
+    
     with col1:
-        st.metric(
-            label="Total Reports", 
-            value=len(st.session_state.reports_history),
-            delta="All time"
-        )
+        st.markdown("""
+        <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                    padding: 1rem; border-radius: 10px; text-align: center; color: white;'>
+            <h3 style='margin: 0; font-size: 2rem;'>📄</h3>
+            <h2 style='margin: 0.5rem 0 0 0;'>{}</h2>
+            <p style='margin: 0; opacity: 0.8;'>Total Reports</p>
+        </div>
+        """.format(total_reports), unsafe_allow_html=True)
     
     with col2:
-        recent_reports = len([r for r in st.session_state.reports_history 
-                             if r.get('date', '').startswith(datetime.now().strftime('%Y-%m'))])
-        st.metric(
-            label="This Month", 
-            value=recent_reports,
-            delta=f"{recent_reports} new"
-        )
+        st.markdown("""
+        <div style='background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); 
+                    padding: 1rem; border-radius: 10px; text-align: center; color: white;'>
+            <h3 style='margin: 0; font-size: 2rem;'>📅</h3>
+            <h2 style='margin: 0.5rem 0 0 0;'>{}</h2>
+            <p style='margin: 0; opacity: 0.8;'>This Month</p>
+        </div>
+        """.format(recent_reports), unsafe_allow_html=True)
     
     with col3:
-        concerns = sum(len(r.get('concerns', [])) for r in st.session_state.reports_history)
-        st.metric(
-            label="Total Concerns",
-            value=concerns,
-            delta="Flagged items"
-        )
+        concern_color = "#4facfe" if concerns == 0 else "#f093fb" if concerns <= 3 else "#f5576c"
+        concern_icon = "✅" if concerns == 0 else "⚠️" if concerns <= 3 else "🚨"
+        st.markdown("""
+        <div style='background: linear-gradient(135deg, {} 0%, {} 100%); 
+                    padding: 1rem; border-radius: 10px; text-align: center; color: white;'>
+            <h3 style='margin: 0; font-size: 2rem;'>{}</h3>
+            <h2 style='margin: 0.5rem 0 0 0;'>{}</h2>
+            <p style='margin: 0; opacity: 0.8;'>Health Concerns</p>
+        </div>
+        """.format(concern_color, concern_color, concern_icon, concerns), unsafe_allow_html=True)
     
     with col4:
-        st.metric(
-            label="Health Score",
-            value="Good" if concerns < 3 else "Monitor",
-            delta="Overall status"
-        )
+        score_color = "#4facfe" if health_score >= 80 else "#f093fb" if health_score >= 60 else "#f5576c"
+        trend_icon = "📈" if trend == "up" else "📉" if trend == "down" else "📊"
+        st.markdown("""
+        <div style='background: linear-gradient(135deg, {} 0%, {} 100%); 
+                    padding: 1rem; border-radius: 10px; text-align: center; color: white;'>
+            <h3 style='margin: 0; font-size: 2rem;'>{}</h3>
+            <h2 style='margin: 0.5rem 0 0 0;'>{}%</h2>
+            <p style='margin: 0; opacity: 0.8;'>Health Score</p>
+        </div>
+        """.format(score_color, score_color, trend_icon, health_score), unsafe_allow_html=True)
+    
+    # Health Score Visualization
+    if st.session_state.reports_history:
+        st.markdown("### 📊 Health Score Trends")
+        
+        # Create health score trend chart
+        if len(st.session_state.reports_history) > 1:
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                # Calculate scores for each report
+                scores = []
+                dates = []
+                for i in range(len(st.session_state.reports_history)):
+                    subset = st.session_state.reports_history[:i+1]
+                    score, _ = calculate_health_score(subset)
+                    scores.append(score)
+                    dates.append(st.session_state.reports_history[i]['date'][:10])
+                
+                # Create trend chart
+                trend_data = pd.DataFrame({
+                    'Date': dates,
+                    'Health Score': scores
+                })
+                st.line_chart(trend_data.set_index('Date'))
+            
+            with col2:
+                # Show trend analysis
+                recent_score = scores[-1]
+                prev_score = scores[-2] if len(scores) > 1 else scores[-1]
+                score_change = recent_score - prev_score
+                
+                st.metric(
+                    "Latest Score", 
+                    f"{recent_score}%", 
+                    delta=f"{score_change:+.0f}%" if score_change != 0 else "Stable"
+                )
+                
+                # Status indicator
+                if recent_score >= 85:
+                    st.success("🟢 Excellent Health Status")
+                elif recent_score >= 70:
+                    st.info("🟡 Good Health Status")
+                else:
+                    st.warning("🔴 Monitor Health Status")
     
     st.markdown("---")
     
@@ -142,7 +267,7 @@ def show_dashboard():
     
     with col2:
         st.subheader("🎯 Quick Actions")
-        if st.button("📁 Analyze New Report", use_container_width=True):
+        if st.button("📋 Analyze New Report", use_container_width=True):
             st.session_state.current_page = 'upload'
             st.rerun()
         
@@ -150,17 +275,17 @@ def show_dashboard():
             st.session_state.current_page = 'assistant'
             st.rerun()
         
-        if st.button("📋 View Summary", use_container_width=True):
+        if st.button("📈 View Summary", use_container_width=True):
             st.session_state.current_page = 'summary'
             st.rerun()
         
-        if st.button("🏛️ Insurance Claims", use_container_width=True):
+        if st.button("💼 Insurance Claims", use_container_width=True):
             st.session_state.current_page = 'insurance'
             st.rerun()
 
 def show_upload_page():
     """Upload and analysis page (original functionality)"""
-    st.title("📁 Health Report Analysis")
+    st.title("📋 Health Report Analysis")
     st.markdown("Upload your medical reports for AI-powered analysis and summaries")
     
     # Initialize processors
@@ -342,7 +467,7 @@ Disclaimer: This analysis is for informational purposes only and should not repl
 
 def show_summary_page():
     """Report summary page"""
-    st.title("📋 Report Summary")
+    st.title("📈 Report Summary")
     st.markdown("Overview of all your analyzed health reports")
     
     if not st.session_state.reports_history:
@@ -466,7 +591,7 @@ def show_assistant_page():
 
 def show_insurance_page():
     """Insurance claims page"""
-    st.title("🏛️ Insurance Claims Assistant")
+    st.title("💼 Insurance Claims Assistant")
     st.markdown("Generate insurance claim summaries from your health reports")
     
     if not st.session_state.reports_history:

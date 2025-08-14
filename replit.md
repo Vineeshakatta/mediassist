@@ -1,8 +1,8 @@
-# Health Report Analyzer
+# MediAssist AI - Healthcare Intelligence Platform
 
 ## Overview
 
-This is a comprehensive Streamlit-based health dashboard application that analyzes medical reports and health documents using AI-powered analysis. The application features a complete multi-page dashboard with sidebar navigation, allowing users to upload various file formats (PDFs, images, text files) containing health information and provides automated analysis including key metric extraction, health summaries, concerns identification, and personalized recommendations. The system uses OpenAI's API for intelligent analysis combined with regex-based pattern matching for extracting common health metrics like blood pressure, cholesterol levels, glucose readings, and vital signs.
+This is a comprehensive Streamlit-based health dashboard application branded as "MediAssist AI" with the tagline "healthcare intelligence platform". The application analyzes medical reports and health documents using AI-powered analysis, featuring a complete multi-page dashboard with enhanced sidebar navigation, gradient-styled metric cards, health score calculations with trend visualization, and logos/icons throughout. Users can upload various file formats (PDFs, images, text files) containing health information and receive automated analysis including key metric extraction, health summaries, concerns identification, and personalized recommendations. The system uses OpenAI's API for intelligent analysis combined with regex-based pattern matching for extracting common health metrics like blood pressure, cholesterol levels, glucose readings, and vital signs.
 
 ## User Preferences
 
@@ -12,10 +12,12 @@ Preferred communication style: Simple, everyday language.
 
 ### Frontend Architecture
 - **Framework**: Streamlit web application framework with multi-page dashboard
-- **Navigation**: Left sidebar navigation with 6 main sections (Dashboard, Report Analysis, Report Summary, Query Assistant, Insurance Claims, Health History)
+- **Branding**: "MediAssist AI" with medical stethoscope icon and "healthcare intelligence platform" tagline
+- **Navigation**: Left sidebar navigation with 6 main sections using specific icons (📊 Dashboard, 📋 Report Analysis, 📈 Report Summary, 🤖 Query Assistant, 💼 Insurance Claims, 📚 Health History)
 - **Layout**: Wide layout with persistent sidebar navigation and session state management
-- **Components**: Dashboard overview cards, interactive chat interface, file upload system, timeline views, insurance claim generators
-- **User Experience**: Multi-page application with persistent data across sessions, real-time processing, and comprehensive analytics
+- **Visual Design**: Gradient-styled metric cards, color-coded health indicators, trend visualizations
+- **Components**: Enhanced dashboard overview cards with gradients, health score with trend graphs, interactive chat interface, file upload system, timeline views, insurance claim generators
+- **User Experience**: Multi-page application with persistent data across sessions, real-time processing, comprehensive analytics, and visual health score tracking with percentage values and trend indicators
 
 ### Backend Architecture
 - **Core Processing Pipeline**: Three-layer architecture with specialized processors
