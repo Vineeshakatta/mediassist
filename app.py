@@ -140,6 +140,44 @@ def calculate_health_score(reports_history):
     
     return health_score, trend
 
+def process_ai_question(question):
+    """Process AI question and add response to chat history"""
+    if 'health_analyzer' not in st.session_state:
+        st.session_state.health_analyzer = HealthAnalyzer()
+    
+    # Prepare context from reports
+    context = ""
+    if st.session_state.reports_history:
+        context = "Based on your health reports:\n"
+        for report in st.session_state.reports_history[-3:]:  # Last 3 reports
+            context += f"\nReport: {report['filename']}\n"
+            context += f"Summary: {report['summary']}\n"
+            if report['concerns']:
+                context += f"Concerns: {', '.join(report['concerns'])}\n"
+    
+    try:
+        response = st.session_state.health_analyzer.client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system", 
+                    "content": f"""You are a health assistant. Answer questions about the user's health reports in a helpful, informative way. Always remind users to consult healthcare professionals for medical decisions.
+                    
+                    Context from user's reports:
+                    {context}"""
+                },
+                {"role": "user", "content": question}
+            ],
+            max_tokens=500
+        )
+        
+        ai_response = response.choices[0].message.content
+        st.session_state.chat_history.append({"role": "assistant", "content": ai_response})
+        
+    except Exception as e:
+        error_msg = f"Sorry, I couldn't process your question: {str(e)}"
+        st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
+
 def show_dashboard():
     """Main dashboard page"""
     st.title("📊 Health Dashboard")
@@ -532,6 +570,32 @@ def show_assistant_page():
     if 'chat_history' not in st.session_state:
         st.session_state.chat_history = []
     
+    # Quick Questions Section
+    with st.expander("💡 Quick Questions", expanded=True):
+        st.markdown("**Click on any question to ask it instantly:**")
+        
+        quick_questions = [
+            ("📊 What are my latest health metrics?", "What are my latest health metrics and how do they compare to normal ranges?"),
+            ("⚠️ What health concerns should I watch?", "What health concerns or warning signs should I be monitoring based on my reports?"),
+            ("📈 How is my health trending?", "How has my health been trending over time? Am I improving or declining?"),
+            ("💊 What lifestyle changes are recommended?", "What lifestyle changes or recommendations do you suggest based on my health reports?"),
+            ("🩺 When should I see a doctor?", "Based on my reports, are there any findings that suggest I should consult with a healthcare professional?"),
+            ("📋 Can you summarize my health status?", "Can you provide a comprehensive summary of my current health status?")
+        ]
+        
+        cols = st.columns(2)
+        for i, (display_text, full_question) in enumerate(quick_questions):
+            col = cols[i % 2]
+            with col:
+                if st.button(display_text, key=f"quick_q_{i}", use_container_width=True):
+                    # Add the question to chat
+                    st.session_state.chat_history.append({"role": "user", "content": full_question})
+                    # Process the question immediately
+                    process_ai_question(full_question)
+                    st.rerun()
+    
+    st.markdown("---")
+    
     # Display chat history
     for message in st.session_state.chat_history:
         with st.chat_message(message["role"]):
@@ -547,42 +611,10 @@ def show_assistant_page():
         # Generate AI response
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                # Prepare context from reports
-                context = ""
-                if st.session_state.reports_history:
-                    context = "Based on your health reports:\n"
-                    for report in st.session_state.reports_history[-3:]:  # Last 3 reports
-                        context += f"\nReport: {report['filename']}\n"
-                        context += f"Summary: {report['summary']}\n"
-                        if report['concerns']:
-                            context += f"Concerns: {', '.join(report['concerns'])}\n"
-                
-                try:
-                    response = st.session_state.health_analyzer.client.chat.completions.create(
-                        model="gpt-4o",
-                        messages=[
-                            {
-                                "role": "system", 
-                                "content": f"""You are a health assistant. Answer questions about the user's health reports in a helpful, informative way. Always remind users to consult healthcare professionals for medical decisions.
-                                
-                                Context from user's reports:
-                                {context}"""
-                            },
-                            {"role": "user", "content": prompt}
-                        ],
-                        max_tokens=500
-                    )
-                    
-                    ai_response = response.choices[0].message.content
-                    st.write(ai_response)
-                    
-                    # Add to chat history
-                    st.session_state.chat_history.append({"role": "assistant", "content": ai_response})
-                    
-                except Exception as e:
-                    error_msg = f"Sorry, I couldn't process your question: {str(e)}"
-                    st.write(error_msg)
-                    st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
+                process_ai_question(prompt)
+                # Display the latest response
+                latest_response = st.session_state.chat_history[-1]["content"]
+                st.write(latest_response)
     
     # Clear chat button
     if st.button("🗑️ Clear Chat History"):
@@ -594,6 +626,28 @@ def show_insurance_page():
     st.title("💼 Insurance Claims Assistant")
     st.markdown("Generate insurance claim summaries from your health reports")
     
+    # Insurance Claim Guide
+    with st.expander("📚 Insurance Claim Guide", expanded=False):
+        st.markdown("""
+        ### How to Use This Tool
+        1. **Select Claim Type**: Choose the appropriate insurance claim category
+        2. **Select Reports**: Choose which health reports to include
+        3. **Generate Summary**: Create a professional claim summary
+        4. **Download**: Save the summary for submission
+        
+        ### What's Included in Claims
+        - **Medical Summary**: Professional overview of health findings
+        - **Supporting Evidence**: Key metrics and documented concerns
+        - **Claim Justification**: Clear reasoning for insurance coverage
+        - **Professional Format**: Insurance-ready documentation
+        
+        ### Important Notes
+        - This tool generates supporting documentation only
+        - Always consult with your healthcare provider
+        - Review your insurance policy for specific requirements
+        - Contact your insurance company for submission procedures
+        """)
+    
     if not st.session_state.reports_history:
         st.info("No reports available for insurance claims. Upload health reports first.")
         if st.button("📁 Upload Reports"):
@@ -601,6 +655,48 @@ def show_insurance_page():
             st.rerun()
         return
     
+    # Claim Type Selection
+    st.subheader("🏷️ Select Claim Type")
+    
+    claim_types = {
+        "🏥 Medical Treatment": {
+            "description": "Claims for medical treatments, procedures, and consultations",
+            "keywords": ["treatment", "procedure", "consultation", "therapy"]
+        },
+        "💊 Prescription Medications": {
+            "description": "Claims for prescribed medications and pharmaceutical needs",
+            "keywords": ["medication", "prescription", "pharmaceutical", "drug"]
+        },
+        "🔬 Diagnostic Testing": {
+            "description": "Claims for lab tests, imaging, and diagnostic procedures",
+            "keywords": ["lab test", "imaging", "diagnostic", "screening"]
+        },
+        "🚑 Emergency Care": {
+            "description": "Claims for emergency room visits and urgent care",
+            "keywords": ["emergency", "urgent", "acute", "immediate"]
+        },
+        "🏃 Preventive Care": {
+            "description": "Claims for wellness exams and preventive healthcare",
+            "keywords": ["wellness", "preventive", "checkup", "screening"]
+        },
+        "♿ Disability Support": {
+            "description": "Claims for disability-related healthcare and support",
+            "keywords": ["disability", "accommodation", "support", "assistance"]
+        }
+    }
+    
+    # Display claim type options
+    selected_claim_type = st.radio(
+        "Choose the type of insurance claim:",
+        list(claim_types.keys()),
+        help="Select the category that best matches your insurance claim needs"
+    )
+    
+    # Show description for selected type
+    if selected_claim_type:
+        st.info(f"**{selected_claim_type}**: {claim_types[selected_claim_type]['description']}")
+    
+    st.markdown("---")
     st.subheader("📋 Generate Claim Summary")
     
     # Report selection
@@ -640,36 +736,47 @@ def show_insurance_page():
             
             combined_summary = "\n\n".join(combined_summaries)
             
-            # Generate claim summary
+            # Generate enhanced claim summary with claim type
+            claim_category = selected_claim_type.split(' ', 1)[1] if ' ' in selected_claim_type else selected_claim_type
             claim_summary = f"""
 INSURANCE CLAIM SUMMARY
+Claim Type: {selected_claim_type}
 Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+
+CLAIM CATEGORY: {claim_category.upper()}
+{claim_types[selected_claim_type]['description']}
 
 PATIENT REPORTS SUMMARY:
 {combined_summary}
 
-CLAIM JUSTIFICATION:
-Based on the medical reports provided, this claim is supported by documented health concerns and medical findings. The reports show specific health metrics and professional medical analysis that justify the need for insurance coverage.
+MEDICAL NECESSITY JUSTIFICATION:
+Based on the medical reports provided, this {claim_category.lower()} claim is supported by documented health concerns and medical findings. The reports demonstrate specific health metrics and professional medical analysis that justify the medical necessity for insurance coverage under the {claim_category.lower()} category.
 
-SUPPORTING DOCUMENTATION:
-- {len(claim_reports)} medical report(s) analyzed
-- AI-powered analysis confirming health concerns
-- Documented metrics and recommendations
+SUPPORTING EVIDENCE:
+- {len(claim_reports)} comprehensive medical report(s) analyzed
+- AI-powered clinical analysis confirming health concerns
+- Documented metrics and professional recommendations
+- Evidence aligned with {claim_category.lower()} claim requirements
 
-Please review the attached medical reports for complete clinical details.
+CLAIM SUMMARY:
+This claim requests coverage for {claim_category.lower()} based on documented medical evidence. The supporting reports provide clear justification for the medical necessity of the requested coverage.
+
+Please review the attached medical reports for complete clinical details and supporting documentation.
 
 ---
-Note: This summary is generated for insurance claim purposes. All medical decisions should be made in consultation with qualified healthcare professionals.
+IMPORTANT DISCLAIMER: 
+This summary is generated for insurance claim documentation purposes only. All medical decisions and treatments should be made in consultation with qualified healthcare professionals. This document does not constitute medical advice or guarantee insurance coverage approval.
             """
             
             st.success("✅ Claim Summary Generated!")
             st.text_area("Insurance Claim Summary:", value=claim_summary, height=400)
             
-            # Download button
+            # Download button with claim type in filename
+            claim_type_safe = selected_claim_type.replace(" ", "_").replace("🏥", "").replace("💊", "").replace("🔬", "").replace("🚑", "").replace("🏃", "").replace("♿", "").strip()
             st.download_button(
                 label="📥 Download Claim Summary",
                 data=claim_summary,
-                file_name=f"insurance_claim_summary_{datetime.now().strftime('%Y%m%d')}.txt",
+                file_name=f"insurance_claim_{claim_type_safe}_{datetime.now().strftime('%Y%m%d')}.txt",
                 mime="text/plain"
             )
 
