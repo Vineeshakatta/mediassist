@@ -1,8 +1,8 @@
-# MediAssist AI - Healthcare Intelligence Platform
+# Smart Medi Assist AI - Healthcare Intelligence Platform
 
 ## Overview
 
-This is a comprehensive Streamlit-based health dashboard application branded as "MediAssist AI" with the tagline "healthcare intelligence platform". The application analyzes medical reports and health documents using AI-powered analysis, featuring a complete multi-page dashboard with enhanced sidebar navigation, gradient-styled metric cards, health score calculations with trend visualization, and logos/icons throughout. Users can upload various file formats (PDFs, images, text files) containing health information and receive automated analysis including key metric extraction, health summaries, concerns identification, and personalized recommendations. The system uses OpenAI's API for intelligent analysis combined with regex-based pattern matching for extracting common health metrics like blood pressure, cholesterol levels, glucose readings, and vital signs.
+This is a comprehensive Streamlit-based health dashboard application branded as "Smart Medi Assist AI" with the tagline "healthcare intelligence platform". The application analyzes medical reports and health documents using AI-powered analysis, featuring a complete multi-page dashboard with enhanced sidebar navigation, gradient-styled metric cards, health score calculations with trend visualization, and logos/icons throughout. Users can upload various file formats (PDFs, images, text files) containing health information and receive automated analysis including key metric extraction, health summaries, concerns identification, and personalized recommendations. The system uses OpenAI's API for intelligent analysis combined with regex-based pattern matching for extracting common health metrics like blood pressure, cholesterol levels, glucose readings, and vital signs.
 
 **Recent Enhancement**: Added comprehensive Query Assistant with 6 quick questions, enhanced Insurance Claims with detailed claim types and professional documentation guide, and created complete project documentation including technical architecture and feature demonstration guides.
 
