@@ -16,13 +16,24 @@ st.set_page_config(
 )
 
 def main():
-    # Initialize session state
+    # Initialize session state with persistence keys
     if 'current_page' not in st.session_state:
         st.session_state.current_page = 'dashboard'
     if 'reports_history' not in st.session_state:
         st.session_state.reports_history = []
     if 'health_data' not in st.session_state:
         st.session_state.health_data = {}
+    if 'processed_files' not in st.session_state:
+        st.session_state.processed_files = {}
+    if 'last_analysis' not in st.session_state:
+        st.session_state.last_analysis = None
+    if 'file_upload_counter' not in st.session_state:
+        st.session_state.file_upload_counter = 0
+    if 'session_id' not in st.session_state:
+        st.session_state.session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    
+    # Enhanced session persistence - prevent data loss on reload
+    st.session_state.persistent = True
     
     # Sidebar Navigation
     with st.sidebar:
@@ -45,9 +56,42 @@ def main():
             'history': '📚 Health History'
         }
         
+        # Enhanced navigation with better highlighting
+        st.markdown("""
+        <style>
+        .nav-button-active {
+            background: linear-gradient(90deg, #1f77b4, #4A9EFF) !important;
+            color: white !important;
+            border: 2px solid #1f77b4 !important;
+            border-radius: 8px !important;
+            font-weight: bold !important;
+            box-shadow: 0 2px 4px rgba(31, 119, 180, 0.3) !important;
+        }
+        .nav-button {
+            background: transparent !important;
+            color: #1f77b4 !important;
+            border: 1px solid #ddd !important;
+            border-radius: 8px !important;
+            margin-bottom: 4px !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        
         for page_key, page_name in pages.items():
-            if st.button(page_name, key=f"nav_{page_key}", use_container_width=True):
+            is_current = st.session_state.current_page == page_key
+            
+            # Create visual indicator for current page
+            if is_current:
+                st.markdown(f"**→ {page_name}**", help="Current page")
+            
+            if st.button(
+                page_name, 
+                key=f"nav_{page_key}", 
+                use_container_width=True,
+                type="primary" if is_current else "secondary"
+            ):
                 st.session_state.current_page = page_key
+                st.rerun()
         
         st.markdown("---")
         
@@ -237,12 +281,12 @@ def show_dashboard():
         </div>
         """.format(score_color, score_color, trend_icon, health_score), unsafe_allow_html=True)
     
-    # Health Score Visualization
-    if st.session_state.reports_history:
-        st.markdown("### 📊 Health Score Trends")
-        
-        # Create health score trend chart
-        if len(st.session_state.reports_history) > 1:
+    # Health Score Visualization - Fixed height container
+    st.markdown("### 📊 Health Score Trends")
+    
+    # Create a fixed height container for consistent layout
+    with st.container():
+        if st.session_state.reports_history and len(st.session_state.reports_history) > 1:
             col1, col2 = st.columns([2, 1])
             
             with col1:
@@ -255,12 +299,12 @@ def show_dashboard():
                     scores.append(score)
                     dates.append(st.session_state.reports_history[i]['date'][:10])
                 
-                # Create trend chart
+                # Create trend chart with fixed height
                 trend_data = pd.DataFrame({
                     'Date': dates,
                     'Health Score': scores
                 })
-                st.line_chart(trend_data.set_index('Date'))
+                st.line_chart(trend_data.set_index('Date'), height=300)
             
             with col2:
                 # Show trend analysis
@@ -274,13 +318,26 @@ def show_dashboard():
                     delta=f"{score_change:+.0f}%" if score_change != 0 else "Stable"
                 )
                 
-                # Status indicator
+                # Status indicator with consistent height
+                st.markdown("<div style='height: 100px;'>", unsafe_allow_html=True)
                 if recent_score >= 85:
                     st.success("🟢 Excellent Health Status")
                 elif recent_score >= 70:
                     st.info("🟡 Good Health Status")
                 else:
                     st.warning("🔴 Monitor Health Status")
+                st.markdown("</div>", unsafe_allow_html=True)
+        else:
+            # Fixed height placeholder when no data
+            st.markdown("""
+            <div style='height: 300px; display: flex; align-items: center; justify-content: center; 
+                        border: 2px dashed #ddd; border-radius: 10px; background-color: #f8f9fa;'>
+                <div style='text-align: center;'>
+                    <h3>📊 Health Trends Will Appear Here</h3>
+                    <p>Upload multiple reports to see your health score progression over time</p>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
     
     st.markdown("---")
     
@@ -303,6 +360,40 @@ def show_dashboard():
             st.rerun()
     
 
+    with col1:
+        st.subheader("📈 Recent Analysis")
+        if st.session_state.reports_history:
+            # Show last 5 reports
+            recent = st.session_state.reports_history[-5:]
+            for report in reversed(recent):
+                with st.expander(f"📄 {report.get('filename', 'Unknown')} - {report.get('date', 'Unknown date')}"):
+                    st.write(f"**Summary:** {report.get('summary', 'No summary available')[:200]}...")
+                    if report.get('concerns'):
+                        st.warning(f"Concerns: {len(report['concerns'])} items flagged")
+        else:
+            st.info("No reports analyzed yet. Upload your first health report to get started!")
+            if st.button("📁 Upload First Report"):
+                st.session_state.current_page = 'upload'
+                st.rerun()
+    
+    with col2:
+        st.subheader("📊 Health Insights")
+        if st.session_state.reports_history:
+            # Show key health metrics from latest report
+            latest_report = st.session_state.reports_history[-1]
+            if latest_report.get('metrics'):
+                st.write("**Latest Metrics:**")
+                for metric in latest_report['metrics'][:3]:  # Show top 3 metrics
+                    st.write(f"• {metric.get('name', 'Unknown')}: {metric.get('value', 'N/A')}")
+            
+            if latest_report.get('concerns'):
+                st.write("**Recent Concerns:**")
+                for concern in latest_report['concerns'][:2]:  # Show top 2 concerns
+                    st.warning(f"⚠️ {concern}")
+        else:
+            st.info("Upload reports to see health insights")
+
+
 def show_upload_page():
     """Upload and analysis page (original functionality)"""
     st.title("📋 Health Report Analysis")
@@ -314,6 +405,21 @@ def show_upload_page():
     
     if 'file_processor' not in st.session_state:
         st.session_state.file_processor = FileProcessor()
+    
+    # Display file upload history (always visible)
+    if st.session_state.reports_history:
+        with st.expander("📚 Upload History", expanded=True):
+            st.markdown("**Previously analyzed files:**")
+            for i, report in enumerate(reversed(st.session_state.reports_history[-5:])):  # Show last 5
+                col1, col2, col3 = st.columns([3, 2, 1])
+                with col1:
+                    st.write(f"📄 {report['filename']}")
+                with col2:
+                    st.write(f"🕒 {report['date']}")
+                with col3:
+                    status = "✅" if report.get('downloaded', False) else "📥"
+                    st.write(status)
+            st.markdown("---")
     
     # File upload section
     st.header("📁 Upload Your Health Report")
@@ -381,17 +487,20 @@ def show_upload_page():
 def display_analysis_results(analysis_result, extracted_text, filename):
     """Display the analysis results in a structured format"""
     
-    # Save to history
+    # Save to history with persistent ID
     report_data = {
+        'id': f"report_{len(st.session_state.reports_history) + 1}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
         'filename': filename,
         'date': datetime.now().strftime('%Y-%m-%d %H:%M'),
         'summary': analysis_result.get('summary', ''),
         'concerns': analysis_result.get('concerns', []),
         'recommendations': analysis_result.get('recommendations', []),
         'metrics': analysis_result.get('metrics', []),
-        'extracted_text': extracted_text
+        'extracted_text': extracted_text,
+        'downloaded': False
     }
     st.session_state.reports_history.append(report_data)
+    st.session_state.last_analysis = report_data
     
     st.success("✅ Analysis Complete!")
     
@@ -478,6 +587,7 @@ KEY METRICS:
 Disclaimer: This analysis is for informational purposes only and should not replace professional medical advice.
 """
     
+
     st.download_button(
         label="📥 Download Analysis Summary",
         data=download_content,
@@ -538,6 +648,26 @@ Disclaimer: This analysis is for informational purposes only and should not repl
                     )
     else:
         st.info("No reports uploaded yet. Upload your first health report above to get started!")
+
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        if st.download_button(
+            label="📥 Download Analysis Summary",
+            data=download_content,
+            file_name=f"health_analysis_{filename.split('.')[0]}_{datetime.now().strftime('%Y%m%d')}.txt",
+            mime="text/plain",
+            key=f"download_{report_data['id']}"
+        ):
+            # Mark as downloaded but keep button visible
+            for report in st.session_state.reports_history:
+                if report['id'] == report_data['id']:
+                    report['downloaded'] = True
+    
+    with col2:
+        if report_data.get('downloaded', False):
+            st.success("✅ Downloaded!")
+        st.info("💡 Download stays available")
+
 
 def show_summary_page():
     """Report summary page"""
