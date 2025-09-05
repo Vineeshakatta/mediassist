@@ -344,22 +344,8 @@ def show_dashboard():
     # Recent Activity
     st.markdown("---")
     
-    st.subheader("📈 Recent Analysis")
-    if st.session_state.reports_history:
-        # Show last 5 reports
-        recent = st.session_state.reports_history[-5:]
-        for report in reversed(recent):
-            with st.expander(f"📄 {report.get('filename', 'Unknown')} - {report.get('date', 'Unknown date')}"):
-                st.write(f"**Summary:** {report.get('summary', 'No summary available')[:200]}...")
-                if report.get('concerns'):
-                    st.warning(f"Concerns: {len(report['concerns'])} items flagged")
-    else:
-        st.info("No reports analyzed yet. Upload your first health report to get started!")
-        if st.button("📁 Upload First Report"):
-            st.session_state.current_page = 'upload'
-            st.rerun()
+    col1, col2 = st.columns([2, 1])
     
-
     with col1:
         st.subheader("📈 Recent Analysis")
         if st.session_state.reports_history:
@@ -372,7 +358,7 @@ def show_dashboard():
                         st.warning(f"Concerns: {len(report['concerns'])} items flagged")
         else:
             st.info("No reports analyzed yet. Upload your first health report to get started!")
-            if st.button("📁 Upload First Report"):
+            if st.button("📁 Upload First Report", key="dashboard_upload_button"):
                 st.session_state.current_page = 'upload'
                 st.rerun()
     
