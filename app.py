@@ -6,6 +6,7 @@ import tempfile
 import json
 from datetime import datetime
 import pandas as pd
+import pytz
 
 # Configure page
 st.set_page_config(
@@ -52,7 +53,6 @@ def main():
             'upload': '📋 Report Analysis',
             'summary': '📈 Report Summary', 
             'assistant': '🤖 Query Assistant',
-            'insurance': '💼 Insurance Claims',
             'history': '📚 Health History'
         }
         
@@ -131,8 +131,6 @@ def main():
         show_summary_page()
     elif st.session_state.current_page == 'assistant':
         show_assistant_page()
-    elif st.session_state.current_page == 'insurance':
-        show_insurance_page()
     elif st.session_state.current_page == 'history':
         show_history_page()
     
@@ -290,14 +288,21 @@ def show_dashboard():
             col1, col2 = st.columns([2, 1])
             
             with col1:
-                # Calculate scores for each report
+                # Calculate scores for each report using user-provided dates
                 scores = []
                 dates = []
-                for i in range(len(st.session_state.reports_history)):
+                for i, report in enumerate(st.session_state.reports_history):
                     subset = st.session_state.reports_history[:i+1]
                     score, _ = calculate_health_score(subset)
                     scores.append(score)
-                    dates.append(st.session_state.reports_history[i]['date'][:10])
+                    
+                    # Use datetime_obj if available, otherwise parse from date string
+                    if 'datetime_obj' in report:
+                        dates.append(report['datetime_obj'].strftime('%Y-%m-%d'))
+                    else:
+                        # Fallback for older records
+                        date_str = report['date'][:10] if len(report['date']) >= 10 else report['date']
+                        dates.append(date_str)
                 
                 # Create trend chart with fixed height
                 trend_data = pd.DataFrame({
@@ -341,8 +346,87 @@ def show_dashboard():
     
     st.markdown("---")
     
-    # Recent Activity
+    # Key Metrics Trends
+    if st.session_state.reports_history and len(st.session_state.reports_history) > 1:
+        st.markdown("### 📈 Key Metrics Trends")
+        
+        # Extract all unique metric names
+        all_metrics = {}
+        for report in st.session_state.reports_history:
+            if 'metrics' in report and report['metrics']:
+                for metric in report['metrics']:
+                    metric_name = metric.get('name', 'Unknown')
+                    if metric_name not in all_metrics:
+                        all_metrics[metric_name] = []
+                    
+                    # Get the date for this report
+                    if 'datetime_obj' in report:
+                        metric_date = report['datetime_obj'].strftime('%Y-%m-%d')
+                    else:
+                        metric_date = report['date'][:10] if len(report['date']) >= 10 else report['date']
+                    
+                    # Extract numeric value if possible
+                    value_str = str(metric.get('value', ''))
+                    try:
+                        # Try to extract first number from the value string
+                        import re
+                        numbers = re.findall(r'\d+\.?\d*', value_str)
+                        if numbers:
+                            numeric_value = float(numbers[0])
+                            all_metrics[metric_name].append({
+                                'date': metric_date,
+                                'value': numeric_value,
+                                'raw_value': value_str
+                            })
+                    except:
+                        # If can't extract number, skip this data point
+                        pass
+        
+        # Display trends for metrics that have multiple data points
+        metrics_with_trends = {k: v for k, v in all_metrics.items() if len(v) > 1}
+        
+        if metrics_with_trends:
+            # Create columns for multiple metrics
+            num_metrics = len(metrics_with_trends)
+            if num_metrics <= 2:
+                cols = st.columns(num_metrics)
+            else:
+                cols = st.columns(2)
+                
+            for i, (metric_name, data_points) in enumerate(metrics_with_trends.items()):
+                col_idx = i % len(cols)
+                with cols[col_idx]:
+                    st.subheader(f"📊 {metric_name}")
+                    
+                    # Sort by date
+                    data_points.sort(key=lambda x: x['date'])
+                    
+                    # Create trend chart
+                    trend_df = pd.DataFrame({
+                        'Date': [dp['date'] for dp in data_points],
+                        metric_name: [dp['value'] for dp in data_points]
+                    })
+                    
+                    st.line_chart(trend_df.set_index('Date'), height=200)
+                    
+                    # Show latest value and change
+                    if len(data_points) >= 2:
+                        latest_value = data_points[-1]['value']
+                        previous_value = data_points[-2]['value']
+                        change = latest_value - previous_value
+                        change_pct = (change / previous_value * 100) if previous_value != 0 else 0
+                        
+                        st.metric(
+                            f"Latest {metric_name}",
+                            f"{data_points[-1]['raw_value']}",
+                            delta=f"{change:+.1f} ({change_pct:+.1f}%)" if abs(change) > 0.01 else "No change"
+                        )
+        else:
+            st.info("Upload more reports with similar metrics to see trend patterns")
+    
     st.markdown("---")
+    
+    # Recent Activity
     
     col1, col2 = st.columns([2, 1])
     
@@ -410,11 +494,32 @@ def show_upload_page():
     # File upload section
     st.header("📁 Upload Your Health Report")
     
-    uploaded_file = st.file_uploader(
-        "Choose a file",
-        type=['pdf', 'txt', 'png', 'jpg', 'jpeg', 'bmp', 'tiff'],
-        help="Upload your medical report in PDF, image, or text format"
-    )
+    # Date input for report
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        uploaded_file = st.file_uploader(
+            "Choose a file",
+            type=['pdf', 'txt', 'png', 'jpg', 'jpeg', 'bmp', 'tiff'],
+            help="Upload your medical report in PDF, image, or text format"
+        )
+    
+    with col2:
+        # Set up EST timezone
+        est_tz = pytz.timezone('US/Eastern')
+        current_est = datetime.now(est_tz)
+        
+        report_date = st.date_input(
+            "Report Date",
+            value=current_est.date(),
+            help="Select the date of this health report"
+        )
+        
+        report_time = st.time_input(
+            "Report Time",
+            value=current_est.time(),
+            help="Select the time of this health report"
+        )
     
     if uploaded_file is not None:
         # Display file info
@@ -460,7 +565,7 @@ def show_upload_page():
                         os.unlink(tmp_file_path)
                     
                     # Display results
-                    display_analysis_results(analysis_result, extracted_text, uploaded_file.name)
+                    display_analysis_results(analysis_result, extracted_text, uploaded_file.name, report_date, report_time)
                     
             except Exception as e:
                 st.error(f"❌ Error processing file: {str(e)}")
@@ -470,14 +575,31 @@ def show_upload_page():
                     except:
                         pass
 
-def display_analysis_results(analysis_result, extracted_text, filename):
+def display_analysis_results(analysis_result, extracted_text, filename, report_date=None, report_time=None):
     """Display the analysis results in a structured format"""
     
-    # Save to history with persistent ID
+    # Save to history with user-provided date and EST timezone
+    est_tz = pytz.timezone('US/Eastern')
+    
+    # Use user-provided date/time if available, otherwise current EST time
+    if report_date and report_time:
+        # Combine date and time from user input
+        user_datetime = datetime.combine(report_date, report_time)
+        # Localize to EST timezone
+        localized_datetime = est_tz.localize(user_datetime)
+        formatted_date = localized_datetime.strftime('%Y-%m-%d %H:%M EST')
+        datetime_obj = localized_datetime
+    else:
+        # Fallback to current EST time
+        current_est = datetime.now(est_tz)
+        formatted_date = current_est.strftime('%Y-%m-%d %H:%M EST')
+        datetime_obj = current_est
+    
     report_data = {
-        'id': f"report_{len(st.session_state.reports_history) + 1}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+        'id': f"report_{len(st.session_state.reports_history) + 1}_{datetime_obj.strftime('%Y%m%d_%H%M%S')}",
         'filename': filename,
-        'date': datetime.now().strftime('%Y-%m-%d %H:%M'),
+        'date': formatted_date,
+        'datetime_obj': datetime_obj,
         'summary': analysis_result.get('summary', ''),
         'concerns': analysis_result.get('concerns', []),
         'recommendations': analysis_result.get('recommendations', []),
@@ -773,164 +895,6 @@ def show_assistant_page():
         st.session_state.chat_history = []
         st.rerun()
 
-def show_insurance_page():
-    """Insurance claims page"""
-    st.title("💼 Insurance Claims Assistant")
-    st.markdown("Generate insurance claim summaries from your health reports")
-    
-    # Insurance Claim Guide
-    with st.expander("📚 Insurance Claim Guide", expanded=False):
-        st.markdown("""
-        ### How to Use This Tool
-        1. **Select Claim Type**: Choose the appropriate insurance claim category
-        2. **Select Reports**: Choose which health reports to include
-        3. **Generate Summary**: Create a professional claim summary
-        4. **Download**: Save the summary for submission
-        
-        ### What's Included in Claims
-        - **Medical Summary**: Professional overview of health findings
-        - **Supporting Evidence**: Key metrics and documented concerns
-        - **Claim Justification**: Clear reasoning for insurance coverage
-        - **Professional Format**: Insurance-ready documentation
-        
-        ### Important Notes
-        - This tool generates supporting documentation only
-        - Always consult with your healthcare provider
-        - Review your insurance policy for specific requirements
-        - Contact your insurance company for submission procedures
-        """)
-    
-    if not st.session_state.reports_history:
-        st.info("No reports available for insurance claims. Upload health reports first.")
-        if st.button("📁 Upload Reports"):
-            st.session_state.current_page = 'upload'
-            st.rerun()
-        return
-    
-    # Claim Type Selection
-    st.subheader("🏷️ Select Claim Type")
-    
-    claim_types = {
-        "🏥 Medical Treatment": {
-            "description": "Claims for medical treatments, procedures, and consultations",
-            "keywords": ["treatment", "procedure", "consultation", "therapy"]
-        },
-        "💊 Prescription Medications": {
-            "description": "Claims for prescribed medications and pharmaceutical needs",
-            "keywords": ["medication", "prescription", "pharmaceutical", "drug"]
-        },
-        "🔬 Diagnostic Testing": {
-            "description": "Claims for lab tests, imaging, and diagnostic procedures",
-            "keywords": ["lab test", "imaging", "diagnostic", "screening"]
-        },
-        "🚑 Emergency Care": {
-            "description": "Claims for emergency room visits and urgent care",
-            "keywords": ["emergency", "urgent", "acute", "immediate"]
-        },
-        "🏃 Preventive Care": {
-            "description": "Claims for wellness exams and preventive healthcare",
-            "keywords": ["wellness", "preventive", "checkup", "screening"]
-        },
-        "♿ Disability Support": {
-            "description": "Claims for disability-related healthcare and support",
-            "keywords": ["disability", "accommodation", "support", "assistance"]
-        }
-    }
-    
-    # Display claim type options
-    selected_claim_type = st.radio(
-        "Choose the type of insurance claim:",
-        list(claim_types.keys()),
-        help="Select the category that best matches your insurance claim needs"
-    )
-    
-    # Show description for selected type
-    if selected_claim_type:
-        st.info(f"**{selected_claim_type}**: {claim_types[selected_claim_type]['description']}")
-    
-    st.markdown("---")
-    st.subheader("📋 Generate Claim Summary")
-    
-    # Report selection
-    report_options = [f"{r['filename']} ({r['date']})" for r in st.session_state.reports_history]
-    selected_reports = st.multiselect(
-        "Select reports for claim:",
-        report_options,
-        help="Choose one or more reports to include in your insurance claim"
-    )
-    
-    if selected_reports and st.button("📄 Generate Claim Summary"):
-        with st.spinner("Generating insurance claim summary..."):
-            # Get selected report data
-            selected_indices = [report_options.index(r) for r in selected_reports]
-            claim_reports = [st.session_state.reports_history[i] for i in selected_indices]
-            
-            # Combine report data
-            combined_summaries = []
-            for r in claim_reports:
-                concerns_text = ', '.join(r['concerns']) if r['concerns'] else 'None'
-                
-                metrics_list = []
-                if r['metrics']:
-                    for m in r['metrics']:
-                        name = m.get('name', 'Unknown')
-                        value = m.get('value', 'N/A')
-                        metrics_list.append(f"{name}: {value}")
-                metrics_text = ', '.join(metrics_list) if metrics_list else 'None'
-                
-                report_summary = (
-                    f"Report: {r['filename']} (Date: {r['date']})\n"
-                    f"Summary: {r['summary']}\n"
-                    f"Key Concerns: {concerns_text}\n"
-                    f"Metrics: {metrics_text}"
-                )
-                combined_summaries.append(report_summary)
-            
-            combined_summary = "\n\n".join(combined_summaries)
-            
-            # Generate enhanced claim summary with claim type
-            claim_category = selected_claim_type.split(' ', 1)[1] if ' ' in selected_claim_type else selected_claim_type
-            claim_summary = f"""
-INSURANCE CLAIM SUMMARY
-Claim Type: {selected_claim_type}
-Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M')}
-
-CLAIM CATEGORY: {claim_category.upper()}
-{claim_types[selected_claim_type]['description']}
-
-PATIENT REPORTS SUMMARY:
-{combined_summary}
-
-MEDICAL NECESSITY JUSTIFICATION:
-Based on the medical reports provided, this {claim_category.lower()} claim is supported by documented health concerns and medical findings. The reports demonstrate specific health metrics and professional medical analysis that justify the medical necessity for insurance coverage under the {claim_category.lower()} category.
-
-SUPPORTING EVIDENCE:
-- {len(claim_reports)} comprehensive medical report(s) analyzed
-- AI-powered clinical analysis confirming health concerns
-- Documented metrics and professional recommendations
-- Evidence aligned with {claim_category.lower()} claim requirements
-
-CLAIM SUMMARY:
-This claim requests coverage for {claim_category.lower()} based on documented medical evidence. The supporting reports provide clear justification for the medical necessity of the requested coverage.
-
-Please review the attached medical reports for complete clinical details and supporting documentation.
-
----
-IMPORTANT DISCLAIMER: 
-This summary is generated for insurance claim documentation purposes only. All medical decisions and treatments should be made in consultation with qualified healthcare professionals. This document does not constitute medical advice or guarantee insurance coverage approval.
-            """
-            
-            st.success("✅ Claim Summary Generated!")
-            st.text_area("Insurance Claim Summary:", value=claim_summary, height=400)
-            
-            # Download button with claim type in filename
-            claim_type_safe = selected_claim_type.replace(" ", "_").replace("🏥", "").replace("💊", "").replace("🔬", "").replace("🚑", "").replace("🏃", "").replace("♿", "").strip()
-            st.download_button(
-                label="📥 Download Claim Summary",
-                data=claim_summary,
-                file_name=f"insurance_claim_{claim_type_safe}_{datetime.now().strftime('%Y%m%d')}.txt",
-                mime="text/plain"
-            )
 
 def show_history_page():
     """Health history page"""

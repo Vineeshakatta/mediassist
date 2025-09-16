@@ -833,6 +833,7 @@ dependencies = [
     { name = "pillow" },
     { name = "pypdf2" },
     { name = "pytesseract" },
+    { name = "pytz" },
     { name = "streamlit" },
 ]
 
@@ -843,6 +844,7 @@ requires-dist = [
     { name = "pillow", specifier = ">=11.3.0" },
     { name = "pypdf2", specifier = ">=3.0.1" },
     { name = "pytesseract", specifier = ">=0.3.13" },
+    { name = "pytz", specifier = ">=2025.2" },
     { name = "streamlit", specifier = ">=1.48.0" },
 ]
 
