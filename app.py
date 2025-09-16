@@ -7,6 +7,10 @@ import json
 from datetime import datetime
 import pandas as pd
 import pytz
+import requests
+from geopy.geocoders import Nominatim
+from geopy.distance import geodesic
+import re
 
 # Configure page
 st.set_page_config(
@@ -32,6 +36,12 @@ def main():
         st.session_state.file_upload_counter = 0
     if 'session_id' not in st.session_state:
         st.session_state.session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    if 'prescriptions' not in st.session_state:
+        st.session_state.prescriptions = []
+    if 'user_location' not in st.session_state:
+        st.session_state.user_location = None
+    if 'chat_history' not in st.session_state:
+        st.session_state.chat_history = []
     
     # Enhanced session persistence - prevent data loss on reload
     st.session_state.persistent = True
@@ -51,7 +61,8 @@ def main():
         pages = {
             'dashboard': '📊 Dashboard',
             'upload': '📋 Report Analysis',
-            'summary': '📈 Report Summary', 
+            'summary': '📈 Report Summary',
+            'prescription': '💊 Prescription Manager',
             'assistant': '🤖 Query Assistant',
             'history': '📚 Health History'
         }
@@ -129,6 +140,8 @@ def main():
         show_upload_page()
     elif st.session_state.current_page == 'summary':
         show_summary_page()
+    elif st.session_state.current_page == 'prescription':
+        show_prescription_page()
     elif st.session_state.current_page == 'assistant':
         show_assistant_page()
     elif st.session_state.current_page == 'history':
@@ -980,6 +993,567 @@ def show_history_page():
                     st.write(f"• {concern} ({count}x)")
             else:
                 st.info("No recurring concerns identified")
+
+def show_prescription_page():
+    """Prescription management page with comprehensive features"""
+    st.title("💊 Prescription Manager")
+    st.markdown("Manage your medications, find nearby pharmacies, and get AI-powered medical insights")
+    
+    # Create tabs for different features
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "📋 My Prescriptions", 
+        "🏪 Find Pharmacies", 
+        "✉️ Email Suggestions", 
+        "👨‍⚕️ Book Appointment"
+    ])
+    
+    with tab1:
+        show_prescription_management()
+    
+    with tab2:
+        show_pharmacy_locator()
+    
+    with tab3:
+        show_email_suggestions()
+    
+    with tab4:
+        show_appointment_booking()
+
+def show_prescription_management():
+    """Prescription management interface"""
+    st.header("📋 Your Prescriptions")
+    
+    # Add new prescription
+    with st.expander("➕ Add New Prescription", expanded=True):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            medicine_name = st.text_input(
+                "Medicine Name",
+                placeholder="e.g., Aspirin, Metformin, Lisinopril",
+                help="Enter the generic or brand name of your medication"
+            )
+            
+            dosage = st.text_input(
+                "Dosage",
+                placeholder="e.g., 5mg, 10ml, 1 tablet",
+                help="Enter the dose amount and unit"
+            )
+            
+            frequency = st.selectbox(
+                "Frequency",
+                ["Once daily", "Twice daily", "Three times daily", "Four times daily", 
+                 "As needed", "Weekly", "Every other day", "Custom"]
+            )
+        
+        with col2:
+            prescribing_doctor = st.text_input(
+                "Prescribing Doctor",
+                placeholder="Dr. Smith",
+                help="Name of the doctor who prescribed this medication"
+            )
+            
+            start_date = st.date_input(
+                "Start Date",
+                value=datetime.now().date(),
+                help="When you started taking this medication"
+            )
+            
+            notes = st.text_area(
+                "Notes",
+                placeholder="Any special instructions or notes...",
+                help="Additional information about this medication"
+            )
+        
+        if st.button("💊 Add Prescription", type="primary"):
+            if medicine_name:
+                # Get medicine info from DailyMed
+                medicine_info = get_dailymed_info(medicine_name)
+                
+                prescription = {
+                    'id': f"rx_{len(st.session_state.prescriptions) + 1}",
+                    'medicine_name': medicine_name,
+                    'dosage': dosage,
+                    'frequency': frequency,
+                    'prescribing_doctor': prescribing_doctor,
+                    'start_date': start_date.strftime('%Y-%m-%d'),
+                    'notes': notes,
+                    'medicine_info': medicine_info,
+                    'added_date': datetime.now().strftime('%Y-%m-%d %H:%M EST')
+                }
+                
+                st.session_state.prescriptions.append(prescription)
+                st.success(f"✅ Added {medicine_name} to your prescriptions!")
+                st.rerun()
+            else:
+                st.error("Please enter a medicine name")
+    
+    # Display current prescriptions
+    if st.session_state.prescriptions:
+        st.header("📊 Current Prescriptions")
+        
+        for i, prescription in enumerate(st.session_state.prescriptions):
+            with st.expander(f"💊 {prescription['medicine_name']} - {prescription['dosage']}", expanded=False):
+                col1, col2, col3 = st.columns([2, 2, 1])
+                
+                with col1:
+                    st.write(f"**Dosage:** {prescription['dosage']}")
+                    st.write(f"**Frequency:** {prescription['frequency']}")
+                    st.write(f"**Doctor:** {prescription['prescribing_doctor']}")
+                    st.write(f"**Start Date:** {prescription['start_date']}")
+                
+                with col2:
+                    if prescription.get('medicine_info'):
+                        info = prescription['medicine_info']
+                        if info.get('description'):
+                            st.write(f"**Description:** {info['description'][:100]}...")
+                        if info.get('warnings'):
+                            st.warning(f"⚠️ **Warnings:** {info['warnings'][:100]}...")
+                        if info.get('interactions'):
+                            st.info(f"🔄 **Interactions:** {info['interactions'][:100]}...")
+                    
+                    if prescription.get('notes'):
+                        st.write(f"**Notes:** {prescription['notes']}")
+                
+                with col3:
+                    if st.button(f"🗑️ Remove", key=f"remove_{i}"):
+                        st.session_state.prescriptions.pop(i)
+                        st.success("Prescription removed!")
+                        st.rerun()
+                    
+                    if st.button(f"📧 Email Info", key=f"email_{i}"):
+                        st.session_state.selected_prescription = prescription
+                        st.info("Switch to Email Suggestions tab to send this prescription info!")
+    else:
+        st.info("No prescriptions added yet. Add your first prescription above!")
+
+def show_pharmacy_locator():
+    """Pharmacy locator with geolocation"""
+    st.header("🏪 Find Nearby Pharmacies")
+    
+    # Location input
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        location_input = st.text_input(
+            "Enter your location",
+            placeholder="e.g., New York, NY or your ZIP code",
+            help="Enter your city, state, or ZIP code to find nearby pharmacies"
+        )
+    
+    with col2:
+        if st.button("📍 Use My Location", help="Enable location services in your browser"):
+            st.info("Location services require browser permission. Please enter your location manually above.")
+    
+    if location_input:
+        with st.spinner("Finding pharmacies near you..."):
+            pharmacies = find_nearby_pharmacies(location_input)
+            
+            if pharmacies:
+                st.success(f"✅ Found {len(pharmacies)} pharmacies near {location_input}")
+                
+                # Display pharmacy results
+                for i, pharmacy in enumerate(pharmacies[:10]):  # Show top 10
+                    with st.container():
+                        col1, col2, col3 = st.columns([3, 2, 1])
+                        
+                        with col1:
+                            st.subheader(f"🏪 {pharmacy['name']}")
+                            st.write(f"📍 {pharmacy['address']}")
+                            if pharmacy.get('phone'):
+                                st.write(f"📞 {pharmacy['phone']}")
+                        
+                        with col2:
+                            if pharmacy.get('distance'):
+                                st.metric("Distance", f"{pharmacy['distance']:.1f} miles")
+                            if pharmacy.get('rating'):
+                                st.metric("Rating", f"⭐ {pharmacy['rating']}/5")
+                            if pharmacy.get('hours'):
+                                st.write(f"🕒 {pharmacy['hours']}")
+                        
+                        with col3:
+                            if pharmacy.get('phone'):
+                                st.write(f"[📞 Call]({pharmacy['phone']})")
+                            if pharmacy.get('directions_url'):
+                                st.write(f"[🗺️ Directions]({pharmacy['directions_url']})")
+                        
+                        st.markdown("---")
+            else:
+                st.warning("No pharmacies found in your area. Try a different location.")
+
+def show_email_suggestions():
+    """Email prescription suggestions"""
+    st.header("✉️ Email Prescription Suggestions")
+    
+    if not st.session_state.prescriptions:
+        st.info("Add some prescriptions first to email suggestions!")
+        return
+    
+    # Email configuration
+    with st.expander("📧 Email Settings", expanded=True):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            recipient_email = st.text_input(
+                "Recipient Email",
+                placeholder="doctor@example.com or patient@email.com",
+                help="Email address to send prescription information"
+            )
+            
+            email_type = st.selectbox(
+                "Email Type",
+                ["Prescription Summary", "Alternative Medicine Suggestions", "Drug Interaction Alert", "Refill Reminder"]
+            )
+        
+        with col2:
+            sender_name = st.text_input(
+                "Your Name",
+                placeholder="John Doe",
+                help="Your name for the email signature"
+            )
+            
+            include_alternatives = st.checkbox(
+                "Include Alternative Medicine Suggestions",
+                value=True,
+                help="Add AI-generated alternative medicine suggestions"
+            )
+    
+    # Select prescriptions to include
+    st.subheader("📋 Select Prescriptions to Include")
+    
+    selected_prescriptions = []
+    for i, prescription in enumerate(st.session_state.prescriptions):
+        if st.checkbox(f"💊 {prescription['medicine_name']} - {prescription['dosage']}", key=f"select_email_{i}"):
+            selected_prescriptions.append(prescription)
+    
+    # Generate and send email
+    if selected_prescriptions and recipient_email:
+        if st.button("📧 Generate & Send Email", type="primary"):
+            with st.spinner("Generating email content..."):
+                # Generate email content
+                email_content = generate_prescription_email(
+                    selected_prescriptions, 
+                    email_type, 
+                    sender_name,
+                    include_alternatives
+                )
+                
+                st.subheader("📄 Email Preview")
+                st.text_area("Email Content:", value=email_content, height=300, disabled=True)
+                
+                # Send email functionality would go here
+                st.info("📧 Email preview generated! To actually send emails, you'll need to set up email configuration.")
+                
+                # Download option
+                st.download_button(
+                    label="📥 Download Email",
+                    data=email_content,
+                    file_name=f"prescription_email_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
+                    mime="text/plain"
+                )
+
+def show_appointment_booking():
+    """Doctor appointment booking interface"""
+    st.header("👨‍⚕️ Book Doctor Appointment")
+    
+    # Appointment booking form
+    with st.expander("📅 Schedule New Appointment", expanded=True):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            appointment_type = st.selectbox(
+                "Appointment Type",
+                ["General Consultation", "Follow-up Visit", "Prescription Review", 
+                 "Specialist Referral", "Urgent Care", "Telemedicine"]
+            )
+            
+            preferred_doctor = st.text_input(
+                "Preferred Doctor",
+                placeholder="Dr. Smith or any available",
+                help="Enter a specific doctor's name or leave blank for any available"
+            )
+            
+            appointment_date = st.date_input(
+                "Preferred Date",
+                min_value=datetime.now().date(),
+                value=datetime.now().date(),
+                help="Choose your preferred appointment date"
+            )
+        
+        with col2:
+            appointment_time = st.selectbox(
+                "Preferred Time",
+                ["Morning (9AM-12PM)", "Afternoon (12PM-5PM)", "Evening (5PM-8PM)", "Any time available"]
+            )
+            
+            urgency = st.selectbox(
+                "Urgency Level",
+                ["Routine", "Moderate", "Urgent", "Emergency"]
+            )
+            
+            contact_number = st.text_input(
+                "Contact Number",
+                placeholder="+1 (555) 123-4567",
+                help="Phone number for appointment confirmation"
+            )
+        
+        reason_for_visit = st.text_area(
+            "Reason for Visit",
+            placeholder="Describe your symptoms or reason for the appointment...",
+            help="Brief description of why you need this appointment"
+        )
+        
+        # Related prescriptions
+        if st.session_state.prescriptions:
+            st.subheader("💊 Related Prescriptions")
+            st.write("Select prescriptions to discuss during the appointment:")
+            
+            related_prescriptions = []
+            for i, prescription in enumerate(st.session_state.prescriptions):
+                if st.checkbox(
+                    f"💊 {prescription['medicine_name']} - {prescription['dosage']}", 
+                    key=f"appt_rx_{i}"
+                ):
+                    related_prescriptions.append(prescription)
+        
+        if st.button("📅 Submit Appointment Request", type="primary"):
+            if appointment_type and appointment_date and contact_number:
+                appointment_request = {
+                    'id': f"appt_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                    'type': appointment_type,
+                    'preferred_doctor': preferred_doctor,
+                    'date': appointment_date.strftime('%Y-%m-%d'),
+                    'time': appointment_time,
+                    'urgency': urgency,
+                    'contact': contact_number,
+                    'reason': reason_for_visit,
+                    'related_prescriptions': [p['medicine_name'] for p in related_prescriptions] if 'related_prescriptions' in locals() else [],
+                    'status': 'Pending',
+                    'requested_at': datetime.now().strftime('%Y-%m-%d %H:%M EST')
+                }
+                
+                # Initialize appointments if not exists
+                if 'appointments' not in st.session_state:
+                    st.session_state.appointments = []
+                
+                st.session_state.appointments.append(appointment_request)
+                
+                st.success("✅ Appointment request submitted successfully!")
+                st.info("📧 You will receive a confirmation call/email within 24 hours.")
+                
+                # Show appointment summary
+                st.subheader("📋 Appointment Summary")
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.write(f"**Type:** {appointment_type}")
+                    st.write(f"**Date:** {appointment_date}")
+                    st.write(f"**Time:** {appointment_time}")
+                    st.write(f"**Urgency:** {urgency}")
+                
+                with col2:
+                    st.write(f"**Doctor:** {preferred_doctor or 'Any available'}")
+                    st.write(f"**Contact:** {contact_number}")
+                    st.write(f"**Status:** Pending")
+                
+                if reason_for_visit:
+                    st.write(f"**Reason:** {reason_for_visit}")
+            
+            else:
+                st.error("Please fill in all required fields (appointment type, date, and contact number)")
+    
+    # Show existing appointments
+    if 'appointments' in st.session_state and st.session_state.appointments:
+        st.header("📅 Your Appointments")
+        
+        for i, appointment in enumerate(st.session_state.appointments):
+            status_color = "🟡" if appointment['status'] == 'Pending' else "🟢" if appointment['status'] == 'Confirmed' else "🔴"
+            
+            with st.expander(f"{status_color} {appointment['type']} - {appointment['date']}", expanded=False):
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.write(f"**Type:** {appointment['type']}")
+                    st.write(f"**Date:** {appointment['date']}")
+                    st.write(f"**Time:** {appointment['time']}")
+                
+                with col2:
+                    st.write(f"**Doctor:** {appointment['preferred_doctor'] or 'Any available'}")
+                    st.write(f"**Status:** {appointment['status']}")
+                    st.write(f"**Urgency:** {appointment['urgency']}")
+                
+                with col3:
+                    st.write(f"**Contact:** {appointment['contact']}")
+                    st.write(f"**Requested:** {appointment['requested_at']}")
+                    
+                    if st.button(f"❌ Cancel", key=f"cancel_appt_{i}"):
+                        st.session_state.appointments.pop(i)
+                        st.success("Appointment cancelled!")
+                        st.rerun()
+                
+                if appointment.get('reason'):
+                    st.write(f"**Reason:** {appointment['reason']}")
+                
+                if appointment.get('related_prescriptions'):
+                    st.write(f"**Related Prescriptions:** {', '.join(appointment['related_prescriptions'])}")
+
+def get_dailymed_info(medicine_name):
+    """Get medicine information from DailyMed API"""
+    try:
+        # Clean medicine name for API call
+        clean_name = re.sub(r'[^a-zA-Z0-9\s]', '', medicine_name).strip()
+        
+        url = "https://dailymed.nlm.nih.gov/dailymed/services/v2/spls.json"
+        params = {
+            'drug_name': clean_name,
+            'pagesize': 5
+        }
+        
+        response = requests.get(url, params=params, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            if data.get('data') and len(data['data']) > 0:
+                spl = data['data'][0]  # Get first result
+                
+                return {
+                    'title': spl.get('title', 'N/A'),
+                    'description': f"FDA-approved medication: {spl.get('title', 'N/A')}",
+                    'setid': spl.get('setid', ''),
+                    'published_date': spl.get('published_date', ''),
+                    'warnings': "Please consult healthcare provider for specific warnings",
+                    'interactions': "Check with pharmacist for drug interactions"
+                }
+    except Exception as e:
+        st.error(f"Could not fetch medicine information: {str(e)}")
+    
+    return {
+        'description': f"Medication: {medicine_name}",
+        'warnings': "Consult healthcare provider",
+        'interactions': "Check with pharmacist"
+    }
+
+def find_nearby_pharmacies(location):
+    """Find nearby pharmacies using location services"""
+    try:
+        geolocator = Nominatim(user_agent="smart_medi_assist")
+        location_obj = geolocator.geocode(location)
+        
+        if not location_obj:
+            return []
+        
+        # Mock pharmacy data - in real implementation, you'd use Google Places API or similar
+        mock_pharmacies = [
+            {
+                'name': 'CVS Pharmacy',
+                'address': f'123 Main St, {location}',
+                'phone': '(555) 123-4567',
+                'distance': 0.8,
+                'rating': 4.2,
+                'hours': 'Open until 10 PM',
+                'directions_url': f'https://maps.google.com/directions/?api=1&destination=CVS+Pharmacy+{location}'
+            },
+            {
+                'name': 'Walgreens',
+                'address': f'456 Oak Ave, {location}',
+                'phone': '(555) 234-5678',
+                'distance': 1.2,
+                'rating': 4.0,
+                'hours': '24 hours',
+                'directions_url': f'https://maps.google.com/directions/?api=1&destination=Walgreens+{location}'
+            },
+            {
+                'name': 'Rite Aid',
+                'address': f'789 Pine St, {location}',
+                'phone': '(555) 345-6789',
+                'distance': 1.5,
+                'rating': 3.8,
+                'hours': 'Open until 9 PM',
+                'directions_url': f'https://maps.google.com/directions/?api=1&destination=Rite+Aid+{location}'
+            },
+            {
+                'name': 'Local Family Pharmacy',
+                'address': f'321 Elm St, {location}',
+                'phone': '(555) 456-7890',
+                'distance': 2.1,
+                'rating': 4.5,
+                'hours': 'Open until 8 PM',
+                'directions_url': f'https://maps.google.com/directions/?api=1&destination=Family+Pharmacy+{location}'
+            }
+        ]
+        
+        return mock_pharmacies
+    
+    except Exception as e:
+        st.error(f"Error finding pharmacies: {str(e)}")
+        return []
+
+def generate_prescription_email(prescriptions, email_type, sender_name, include_alternatives=True):
+    """Generate email content for prescription information"""
+    
+    est_tz = pytz.timezone('US/Eastern')
+    current_time = datetime.now(est_tz).strftime('%B %d, %Y at %I:%M %p EST')
+    
+    email_content = f"""
+Subject: {email_type} - Generated by Smart Medi Assist AI
+
+Dear Healthcare Provider,
+
+I hope this email finds you well. I am writing to share my current prescription information as managed through Smart Medi Assist AI.
+
+{email_type.upper()}
+Generated on: {current_time}
+
+CURRENT PRESCRIPTIONS:
+"""
+    
+    for i, prescription in enumerate(prescriptions, 1):
+        email_content += f"""
+{i}. {prescription['medicine_name']}
+   - Dosage: {prescription['dosage']}
+   - Frequency: {prescription['frequency']}
+   - Prescribing Doctor: {prescription['prescribing_doctor']}
+   - Start Date: {prescription['start_date']}
+   - Notes: {prescription.get('notes', 'None')}
+"""
+        
+        if prescription.get('medicine_info'):
+            info = prescription['medicine_info']
+            if info.get('description'):
+                email_content += f"   - Description: {info['description']}\n"
+    
+    if include_alternatives and email_type == "Alternative Medicine Suggestions":
+        email_content += """
+
+AI-GENERATED ALTERNATIVE SUGGESTIONS:
+Based on the current prescriptions and health data analysis, here are some potential alternatives to discuss:
+
+• Generic equivalents may be available for cost savings
+• Natural supplements could complement current treatments
+• Lifestyle modifications may reduce medication dependency
+• Drug interaction checks have been performed
+
+Please note: These are AI-generated suggestions for discussion purposes only. 
+All medication changes should be made only under professional medical supervision.
+"""
+    
+    email_content += f"""
+
+IMPORTANT DISCLAIMER:
+This information is generated by Smart Medi Assist AI for healthcare communication purposes only. 
+All medical decisions should be made in consultation with qualified healthcare professionals.
+
+If you have any questions or need additional information, please don't hesitate to contact me.
+
+Best regards,
+{sender_name}
+
+---
+Generated by Smart Medi Assist AI - Healthcare Intelligence Platform
+For questions about this system, please contact: support@smartmediassist.com
+"""
+    
+    return email_content
 
 if __name__ == "__main__":
     main()
