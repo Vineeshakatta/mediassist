@@ -196,11 +196,11 @@ def calculate_health_score(reports_history):
     return health_score, trend
 
 def process_ai_question(question):
-    """Process AI question and add response to chat history"""
+    """Process AI question and add response to chat history with alternative medicine suggestions"""
     if 'health_analyzer' not in st.session_state:
         st.session_state.health_analyzer = HealthAnalyzer()
     
-    # Prepare context from reports
+    # Prepare context from reports and prescriptions
     context = ""
     if st.session_state.reports_history:
         context = "Based on your health reports:\n"
@@ -210,20 +210,52 @@ def process_ai_question(question):
             if report['concerns']:
                 context += f"Concerns: {', '.join(report['concerns'])}\n"
     
+    # Add prescription context
+    if st.session_state.prescriptions:
+        context += "\nCurrent Prescriptions:\n"
+        for prescription in st.session_state.prescriptions:
+            context += f"- {prescription['medicine_name']} ({prescription['dosage']}, {prescription['frequency']})\n"
+    
+    # Check if question is about alternative medicines
+    is_alternative_query = any(keyword in question.lower() for keyword in [
+        'alternative', 'natural', 'substitute', 'replace', 'generic', 
+        'different', 'other', 'cheaper', 'side effects', 'interaction'
+    ])
+    
     try:
+        system_prompt = f"""You are a health assistant with expertise in alternative medicine options. Answer questions about the user's health reports and medications in a helpful, informative way. Always remind users to consult healthcare professionals for medical decisions.
+        
+        When asked about alternative medicines, provide:
+        1. Generic equivalents when available
+        2. Natural supplement alternatives (with safety notes)
+        3. Lifestyle modifications that might help
+        4. Questions to ask their doctor about alternatives
+        5. Important warnings about drug interactions
+        
+        Context from user's reports and prescriptions:
+        {context}
+        
+        Always emphasize safety and professional medical consultation."""
+        
+        if is_alternative_query:
+            system_prompt += """
+            
+            SPECIAL FOCUS: This question is about alternative medicines. Please provide:
+            - Safe, evidence-based alternatives
+            - Cost-saving generic options
+            - Natural supplements with scientific backing
+            - Lifestyle changes that could help
+            - Important safety warnings
+            - Reminder to discuss with healthcare provider before making changes
+            """
+        
         response = st.session_state.health_analyzer.client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {
-                    "role": "system", 
-                    "content": f"""You are a health assistant. Answer questions about the user's health reports in a helpful, informative way. Always remind users to consult healthcare professionals for medical decisions.
-                    
-                    Context from user's reports:
-                    {context}"""
-                },
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": question}
             ],
-            max_tokens=500
+            max_tokens=600
         )
         
         ai_response = response.choices[0].message.content
@@ -1304,11 +1336,11 @@ def show_appointment_booking():
         )
         
         # Related prescriptions
+        related_prescriptions = []
         if st.session_state.prescriptions:
             st.subheader("💊 Related Prescriptions")
             st.write("Select prescriptions to discuss during the appointment:")
             
-            related_prescriptions = []
             for i, prescription in enumerate(st.session_state.prescriptions):
                 if st.checkbox(
                     f"💊 {prescription['medicine_name']} - {prescription['dosage']}", 
@@ -1327,7 +1359,7 @@ def show_appointment_booking():
                     'urgency': urgency,
                     'contact': contact_number,
                     'reason': reason_for_visit,
-                    'related_prescriptions': [p['medicine_name'] for p in related_prescriptions] if 'related_prescriptions' in locals() else [],
+                    'related_prescriptions': [p['medicine_name'] for p in related_prescriptions],
                     'status': 'Pending',
                     'requested_at': datetime.now().strftime('%Y-%m-%d %H:%M EST')
                 }
