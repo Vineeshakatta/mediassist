@@ -895,11 +895,11 @@ def show_assistant_page():
         
         quick_questions = [
             ("📊 What are my latest health metrics?", "What are my latest health metrics and how do they compare to normal ranges?"),
-            ("⚠️ What health concerns should I watch?", "What health concerns or warning signs should I be monitoring based on my reports?"),
-            ("📈 How is my health trending?", "How has my health been trending over time? Am I improving or declining?"),
-            ("💊 What lifestyle changes are recommended?", "What lifestyle changes or recommendations do you suggest based on my health reports?"),
-            ("🩺 When should I see a doctor?", "Based on my reports, are there any findings that suggest I should consult with a healthcare professional?"),
-            ("📋 Can you summarize my health status?", "Can you provide a comprehensive summary of my current health status?")
+            ("💊 Alternative medicine options", "What are safe alternative medicine options for my current prescriptions? Include generic alternatives and natural supplements."),
+            ("⚠️ Drug interactions check", "Are there any potential interactions between my current medications? What should I watch for?"),
+            ("💰 Cost-saving medication tips", "How can I save money on my medications? Are there generic alternatives or patient assistance programs?"),
+            ("🌿 Natural alternatives to medications", "What natural supplements or lifestyle changes could complement or potentially replace some of my current medications?"),
+            ("📋 Can you summarize my health status?", "Can you provide a comprehensive summary of my current health status including my medications?")
         ]
         
         cols = st.columns(2)
