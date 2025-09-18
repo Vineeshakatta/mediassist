@@ -42,6 +42,14 @@ def main():
         st.session_state.user_location = None
     if 'chat_history' not in st.session_state:
         st.session_state.chat_history = []
+    if 'appointments' not in st.session_state:
+        st.session_state.appointments = []
+    if 'lifestyle_quiz' not in st.session_state:
+        st.session_state.lifestyle_quiz = {}
+    if 'nearby_hospitals' not in st.session_state:
+        st.session_state.nearby_hospitals = []
+    if 'lifestyle_history' not in st.session_state:
+        st.session_state.lifestyle_history = []
     
     # Enhanced session persistence - prevent data loss on reload
     st.session_state.persistent = True
@@ -63,6 +71,8 @@ def main():
             'upload': '📋 Report Analysis',
             'summary': '📈 Report Summary',
             'prescription': '💊 Medication Manager',
+            'appointments': '🏥 Doctor Appointments',
+            'lifestyle': '🌱 Lifestyle Quiz',
             'assistant': '🤖 Query Assistant',
             'history': '📚 Health History'
         }
@@ -144,6 +154,10 @@ def main():
         show_prescription_page()
     elif st.session_state.current_page == 'assistant':
         show_assistant_page()
+    elif st.session_state.current_page == 'appointments':
+        show_appointments_page()
+    elif st.session_state.current_page == 'lifestyle':
+        show_lifestyle_page()
     elif st.session_state.current_page == 'history':
         show_history_page()
     
@@ -391,6 +405,42 @@ def show_dashboard():
     
     st.markdown("---")
     
+    # Lifestyle Trends
+    if st.session_state.lifestyle_history and len(st.session_state.lifestyle_history) > 1:
+        st.markdown("### 🌱 Lifestyle Score Trends")
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            # Create lifestyle trend chart
+            lifestyle_data = pd.DataFrame({
+                'Date': [entry['date'] for entry in st.session_state.lifestyle_history],
+                'Lifestyle Score': [entry['score'] for entry in st.session_state.lifestyle_history]
+            })
+            st.line_chart(lifestyle_data.set_index('Date'), height=300)
+        
+        with col2:
+            # Show latest lifestyle score and change
+            latest_score = st.session_state.lifestyle_history[-1]['score']
+            prev_score = st.session_state.lifestyle_history[-2]['score'] if len(st.session_state.lifestyle_history) > 1 else latest_score
+            score_change = latest_score - prev_score
+            
+            st.metric(
+                "Latest Lifestyle Score", 
+                f"{latest_score}%", 
+                delta=f"{score_change:+.0f}%" if score_change != 0 else "No change"
+            )
+            
+            # Status indicator
+            if latest_score >= 85:
+                st.success("🟢 Excellent Lifestyle")
+            elif latest_score >= 70:
+                st.info("🟡 Good Lifestyle")
+            else:
+                st.warning("🔴 Focus on Improvements")
+        
+        st.markdown("---")
+    
     # Key Metrics Trends
     if st.session_state.reports_history and len(st.session_state.reports_history) > 1:
         st.markdown("### 📈 Key Metrics Trends")
@@ -493,20 +543,37 @@ def show_dashboard():
     
     with col2:
         st.subheader("📊 Health Insights")
+        
+        # Show lifestyle insights if available
+        if st.session_state.lifestyle_history:
+            latest_lifestyle = st.session_state.lifestyle_history[-1]
+            st.write("**Latest Lifestyle Score:**")
+            score = latest_lifestyle['score']
+            score_color = "🟢" if score >= 80 else "🟡" if score >= 60 else "🔴"
+            st.write(f"{score_color} {score}% overall wellness")
+            
+            # Show priority areas
+            priority_areas = get_priority_improvement_areas(latest_lifestyle['quiz_data'])
+            if priority_areas:
+                st.write("**Focus Areas:**")
+                for area in priority_areas[:2]:  # Show top 2 priority areas
+                    st.warning(f"🎯 {area['title']}")
+        
+        # Show medical report insights
         if st.session_state.reports_history:
-            # Show key health metrics from latest report
             latest_report = st.session_state.reports_history[-1]
             if latest_report.get('metrics'):
-                st.write("**Latest Metrics:**")
-                for metric in latest_report['metrics'][:3]:  # Show top 3 metrics
+                st.write("**Latest Medical Metrics:**")
+                for metric in latest_report['metrics'][:2]:  # Show top 2 metrics
                     st.write(f"• {metric.get('name', 'Unknown')}: {metric.get('value', 'N/A')}")
             
             if latest_report.get('concerns'):
-                st.write("**Recent Concerns:**")
+                st.write("**Medical Concerns:**")
                 for concern in latest_report['concerns'][:2]:  # Show top 2 concerns
                     st.warning(f"⚠️ {concern}")
-        else:
-            st.info("Upload reports to see health insights")
+        
+        if not st.session_state.lifestyle_history and not st.session_state.reports_history:
+            st.info("Complete the lifestyle quiz and upload reports to see personalized insights")
 
 
 def show_upload_page():
@@ -1586,6 +1653,789 @@ For questions about this system, please contact: support@smartmediassist.com
 """
     
     return email_content
+
+def show_appointments_page():
+    """Doctor appointment scheduling page with nearby hospital search"""
+    st.title("🏥 Doctor Appointments")
+    st.markdown("Find nearby hospitals and clinics to schedule your appointments")
+    
+    # Get user location
+    with st.container():
+        st.subheader("📍 Your Location")
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            user_address = st.text_input(
+                "Enter your address or city",
+                value=st.session_state.get('user_address', ''),
+                placeholder="e.g., New York, NY or 123 Main St, Boston, MA",
+                help="We'll use this to find nearby healthcare facilities"
+            )
+        
+        with col2:
+            if st.button("🔍 Find Nearby Hospitals", type="primary"):
+                if user_address:
+                    with st.spinner("Searching for nearby hospitals..."):
+                        st.session_state.user_address = user_address
+                        find_nearby_hospitals(user_address)
+                else:
+                    st.error("Please enter your location first")
+    
+    # Display nearby hospitals
+    if st.session_state.nearby_hospitals:
+        st.subheader("🏥 Nearby Healthcare Facilities")
+        
+        for i, hospital in enumerate(st.session_state.nearby_hospitals):
+            with st.expander(f"🏥 {hospital['name']}", expanded=False):
+                col1, col2 = st.columns([2, 1])
+                
+                with col1:
+                    st.write(f"**Address:** {hospital['address']}")
+                    st.write(f"**Distance:** {hospital['distance']:.1f} km away")
+                    st.write(f"**Type:** {hospital['type']}")
+                    st.info("📞 Contact information will be provided after appointment request")
+                
+                with col2:
+                    # Appointment request button
+                    if st.button(f"📅 Request Appointment", key=f"appt_{i}"):
+                        st.session_state.selected_hospital = hospital
+                        st.info("Please fill out the appointment request form below!")
+                        st.rerun()
+    
+    # Appointment request form
+    if st.session_state.get('selected_hospital'):
+        st.markdown("---")
+        st.subheader("📋 Request Appointment")
+        hospital = st.session_state.selected_hospital
+        
+        st.info(f"Requesting appointment at: **{hospital['name']}**")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            patient_name = st.text_input("Full Name", placeholder="Enter your full name")
+            patient_phone = st.text_input("Phone Number", placeholder="Enter your phone number")
+            appointment_type = st.selectbox(
+                "Appointment Type",
+                ["General Consultation", "Follow-up Visit", "Medication Review", 
+                 "Specialist Referral", "Emergency Consultation", "Health Checkup"]
+            )
+        
+        with col2:
+            preferred_date = st.date_input("Preferred Date", min_value=datetime.now().date())
+            preferred_time = st.selectbox(
+                "Preferred Time",
+                ["Morning (9:00 AM - 12:00 PM)", "Afternoon (1:00 PM - 5:00 PM)", "Evening (6:00 PM - 8:00 PM)"]
+            )
+            urgency = st.selectbox("Urgency Level", ["Routine", "Urgent", "Emergency"])
+        
+        # Related health information
+        st.subheader("🩺 Health Information")
+        symptoms = st.text_area("Current Symptoms (if any)", placeholder="Describe any symptoms you're experiencing")
+        
+        # Related medications
+        related_medications = []
+        if st.session_state.prescriptions:
+            st.write("**Select medications to discuss:**")
+            for i, prescription in enumerate(st.session_state.prescriptions):
+                if st.checkbox(
+                    f"💊 {prescription['medicine_name']} - {prescription['dosage']}", 
+                    key=f"appt_med_{i}"
+                ):
+                    related_medications.append(prescription)
+        
+        # Submit appointment request
+        if st.button("📋 Submit Appointment Request", type="primary"):
+            if patient_name and patient_phone:
+                appointment = {
+                    'id': f"appt_{len(st.session_state.appointments) + 1}",
+                    'hospital': hospital['name'],
+                    'hospital_address': hospital['address'],
+                    'hospital_phone': 'Contact provided after confirmation',
+                    'patient_name': patient_name,
+                    'patient_phone': patient_phone,
+                    'appointment_type': appointment_type,
+                    'preferred_date': str(preferred_date),
+                    'preferred_time': preferred_time,
+                    'urgency': urgency,
+                    'symptoms': symptoms,
+                    'related_medications': [m['medicine_name'] for m in related_medications],
+                    'status': 'Requested',
+                    'request_date': datetime.now().strftime('%Y-%m-%d %H:%M')
+                }
+                
+                st.session_state.appointments.append(appointment)
+                st.success("✅ Appointment request submitted successfully!")
+                st.info("The hospital will contact you within 24-48 hours to confirm your appointment.")
+                
+                # Clear the selected hospital
+                del st.session_state.selected_hospital
+                st.rerun()
+            else:
+                st.error("Please fill in your name and phone number")
+    
+    # Display appointment history
+    if st.session_state.appointments:
+        st.markdown("---")
+        st.subheader("📅 Your Appointment Requests")
+        
+        for appointment in reversed(st.session_state.appointments):
+            with st.expander(f"🏥 {appointment['hospital']} - {appointment['preferred_date']}", expanded=False):
+                col1, col2 = st.columns([2, 1])
+                
+                with col1:
+                    st.write(f"**Type:** {appointment['appointment_type']}")
+                    st.write(f"**Date:** {appointment['preferred_date']}")
+                    st.write(f"**Time:** {appointment['preferred_time']}")
+                    st.write(f"**Urgency:** {appointment['urgency']}")
+                    if appointment['symptoms']:
+                        st.write(f"**Symptoms:** {appointment['symptoms']}")
+                    if appointment['related_medications']:
+                        st.write(f"**Medications to discuss:** {', '.join(appointment['related_medications'])}")
+                
+                with col2:
+                    status_color = "🟢" if appointment['status'] == 'Confirmed' else "🟡" if appointment['status'] == 'Requested' else "🔴"
+                    st.write(f"**Status:** {status_color} {appointment['status']}")
+                    st.write(f"**Requested:** {appointment['request_date']}")
+                    st.write(f"**Hospital Phone:** {appointment['hospital_phone']}")
+
+def find_nearby_hospitals(address):
+    """Find nearby hospitals using geopy geocoding with robust error handling"""
+    try:
+        geolocator = Nominatim(user_agent="smart_medi_assist_v1.0")
+        location = geolocator.geocode(address)
+        
+        if location and hasattr(location, 'latitude') and hasattr(location, 'longitude'):
+            # Store user location
+            st.session_state.user_location = {
+                'address': address,
+                'latitude': float(location.latitude),
+                'longitude': float(location.longitude)
+            }
+            
+            st.info("🌍 Location found! Searching for nearby healthcare facilities...")
+            
+            # Sample hospitals (using realistic data based on geocoded location)
+            # Note: In a production app, integrate Google Places API for real data with ratings and phone numbers
+            sample_hospitals = [
+                {
+                    'name': 'General Hospital',
+                    'address': f'123 Medical Center Dr, near {address}',
+                    'distance': 2.3,
+                    'type': 'Hospital'
+                },
+                {
+                    'name': 'Community Medical Center',
+                    'address': f'456 Health Ave, near {address}',
+                    'distance': 3.7,
+                    'type': 'Medical Center'
+                },
+                {
+                    'name': 'Regional Clinic',
+                    'address': f'789 Care St, near {address}',
+                    'distance': 4.1,
+                    'type': 'Clinic'
+                },
+                {
+                    'name': 'Emergency Medical Center',
+                    'address': f'321 Emergency Blvd, near {address}',
+                    'distance': 5.2,
+                    'type': 'Emergency Care'
+                }
+            ]
+            
+            st.session_state.nearby_hospitals = sample_hospitals
+            st.success(f"✅ Found {len(sample_hospitals)} healthcare facilities near {address}")
+        else:
+            st.error("Could not find the location. Please check your address and try again.")
+            
+    except Exception as e:
+        st.error(f"Error finding hospitals: {str(e)}")
+
+def update_lifestyle_history():
+    """Update lifestyle history with current quiz results and timestamp"""
+    if st.session_state.lifestyle_quiz:
+        current_score = calculate_lifestyle_score(st.session_state.lifestyle_quiz)
+        
+        # Create lifestyle history entry
+        history_entry = {
+            'timestamp': datetime.now().isoformat(),
+            'date': datetime.now().strftime('%Y-%m-%d'),
+            'score': current_score,
+            'quiz_data': st.session_state.lifestyle_quiz.copy()
+        }
+        
+        # Update history (keep last 30 entries)
+        st.session_state.lifestyle_history.append(history_entry)
+        if len(st.session_state.lifestyle_history) > 30:
+            st.session_state.lifestyle_history = st.session_state.lifestyle_history[-30:]
+
+def show_lifestyle_page():
+    """Comprehensive lifestyle quiz and health recommendations"""
+    st.title("🌱 Lifestyle Quiz & Health Insights")
+    st.markdown("Take our comprehensive quiz to get personalized health recommendations")
+    
+    # Initialize quiz data
+    if 'quiz_completed' not in st.session_state:
+        st.session_state.quiz_completed = False
+    
+    # Quiz sections
+    quiz_sections = {
+        'sleep': '😴 Sleep Habits',
+        'work': '💼 Work & Stress',
+        'exercise': '🏃‍♂️ Exercise & Activity',
+        'nutrition': '🥗 Nutrition & Eating Habits',
+        'medications': '💊 Medication Habits'
+    }
+    
+    # Create tabs for quiz sections
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(['📝 Take Quiz', '😴 Sleep', '💼 Work', '🏃‍♂️ Exercise', '🥗 Nutrition', '💊 Medications'])
+    
+    with tab1:
+        st.subheader("🌟 Complete Health & Lifestyle Assessment")
+        st.markdown("Answer questions across all categories to get comprehensive health recommendations.")
+        
+        if not st.session_state.quiz_completed:
+            st.info("📋 Please complete all quiz sections in the tabs above, then return here to see your results!")
+        
+        # Progress indicator
+        completed_sections = sum(1 for section in quiz_sections.keys() 
+                               if st.session_state.lifestyle_quiz.get(f'{section}_completed', False))
+        progress = completed_sections / len(quiz_sections)
+        
+        st.progress(progress)
+        st.write(f"Progress: {completed_sections}/{len(quiz_sections)} sections completed")
+        
+        if completed_sections == len(quiz_sections):
+            st.session_state.quiz_completed = True
+            show_lifestyle_recommendations()
+    
+    with tab2:
+        show_sleep_quiz()
+    
+    with tab3:
+        show_work_quiz()
+    
+    with tab4:
+        show_exercise_quiz()
+    
+    with tab5:
+        show_nutrition_quiz()
+    
+    with tab6:
+        show_medication_quiz()
+
+def show_sleep_quiz():
+    """Sleep habits quiz section"""
+    st.subheader("😴 Sleep & Rest Patterns")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        bedtime = st.time_input("What time do you usually go to bed?", value=datetime.strptime("22:00", "%H:%M").time())
+        wake_time = st.time_input("What time do you usually wake up?", value=datetime.strptime("07:00", "%H:%M").time())
+        sleep_quality = st.select_slider(
+            "How would you rate your sleep quality?",
+            options=['Very Poor', 'Poor', 'Average', 'Good', 'Excellent'],
+            value='Average'
+        )
+    
+    with col2:
+        sleep_issues = st.multiselect(
+            "Do you experience any sleep issues?",
+            ['Difficulty falling asleep', 'Frequent waking', 'Early morning awakening', 
+             'Snoring', 'Sleep apnea', 'Restless legs', 'None']
+        )
+        caffeine_time = st.selectbox(
+            "When do you last consume caffeine?",
+            ['Before 2 PM', '2-4 PM', '4-6 PM', 'After 6 PM', 'I don\'t consume caffeine']
+        )
+        screen_time = st.selectbox(
+            "When do you stop using screens before bed?",
+            ['2+ hours before', '1-2 hours before', '30-60 minutes before', 'Right before bed']
+        )
+    
+    if st.button("Save Sleep Information", key="save_sleep"):
+        st.session_state.lifestyle_quiz.update({
+            'bedtime': str(bedtime),
+            'wake_time': str(wake_time),
+            'sleep_quality': sleep_quality,
+            'sleep_issues': sleep_issues,
+            'caffeine_time': caffeine_time,
+            'screen_time': screen_time,
+            'sleep_completed': True,
+            'sleep_timestamp': datetime.now().isoformat()
+        })
+        update_lifestyle_history()
+        st.success("✅ Sleep information saved!")
+
+def show_work_quiz():
+    """Work and stress quiz section"""
+    st.subheader("💼 Work Environment & Stress Management")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        work_schedule = st.selectbox(
+            "What is your typical work schedule?",
+            ['Regular 9-5', 'Shift work', 'Night shifts', 'Irregular hours', 'Work from home', 'Retired/Unemployed']
+        )
+        stress_level = st.select_slider(
+            "How would you rate your stress level?",
+            options=['Very Low', 'Low', 'Moderate', 'High', 'Very High'],
+            value='Moderate'
+        )
+        work_breaks = st.selectbox(
+            "How often do you take breaks during work?",
+            ['Every hour', 'Every 2-3 hours', 'Only lunch break', 'Rarely take breaks']
+        )
+    
+    with col2:
+        stress_symptoms = st.multiselect(
+            "What stress symptoms do you experience?",
+            ['Headaches', 'Muscle tension', 'Fatigue', 'Anxiety', 'Irritability', 
+             'Sleep problems', 'Digestive issues', 'None']
+        )
+        relaxation_activities = st.multiselect(
+            "What relaxation activities do you practice?",
+            ['Meditation', 'Deep breathing', 'Yoga', 'Reading', 'Music', 
+             'Walking', 'Hobbies', 'None']
+        )
+        work_satisfaction = st.select_slider(
+            "How satisfied are you with your work?",
+            options=['Very Dissatisfied', 'Dissatisfied', 'Neutral', 'Satisfied', 'Very Satisfied'],
+            value='Neutral'
+        )
+    
+    if st.button("Save Work Information", key="save_work"):
+        st.session_state.lifestyle_quiz.update({
+            'work_schedule': work_schedule,
+            'stress_level': stress_level,
+            'work_breaks': work_breaks,
+            'stress_symptoms': stress_symptoms,
+            'relaxation_activities': relaxation_activities,
+            'work_satisfaction': work_satisfaction,
+            'work_completed': True
+        })
+        st.success("✅ Work and stress information saved!")
+
+def show_exercise_quiz():
+    """Exercise and physical activity quiz section"""
+    st.subheader("🏃‍♂️ Physical Activity & Exercise")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        exercise_frequency = st.selectbox(
+            "How often do you exercise per week?",
+            ['Never', '1-2 times', '3-4 times', '5-6 times', 'Daily']
+        )
+        exercise_duration = st.selectbox(
+            "How long is each exercise session?",
+            ['Less than 15 minutes', '15-30 minutes', '30-60 minutes', 'More than 60 minutes']
+        )
+        exercise_types = st.multiselect(
+            "What types of exercise do you do?",
+            ['Walking', 'Running', 'Cycling', 'Swimming', 'Weight training', 
+             'Yoga', 'Pilates', 'Team sports', 'Dance', 'None']
+        )
+    
+    with col2:
+        daily_steps = st.selectbox(
+            "Estimated daily steps",
+            ['Less than 2,000', '2,000-5,000', '5,000-8,000', '8,000-10,000', 'More than 10,000']
+        )
+        sedentary_hours = st.selectbox(
+            "Hours spent sitting per day",
+            ['Less than 4', '4-6', '6-8', '8-10', 'More than 10']
+        )
+        exercise_enjoyment = st.select_slider(
+            "How much do you enjoy exercising?",
+            options=['Hate it', 'Dislike', 'Neutral', 'Like', 'Love it'],
+            value='Neutral'
+        )
+    
+    if st.button("Save Exercise Information", key="save_exercise"):
+        st.session_state.lifestyle_quiz.update({
+            'exercise_frequency': exercise_frequency,
+            'exercise_duration': exercise_duration,
+            'exercise_types': exercise_types,
+            'daily_steps': daily_steps,
+            'sedentary_hours': sedentary_hours,
+            'exercise_enjoyment': exercise_enjoyment,
+            'exercise_completed': True
+        })
+        st.success("✅ Exercise information saved!")
+
+def show_nutrition_quiz():
+    """Nutrition and eating habits quiz section"""
+    st.subheader("🥗 Nutrition & Eating Patterns")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        meals_per_day = st.selectbox(
+            "How many meals do you eat per day?",
+            ['1-2 meals', '3 meals', '4-5 small meals', '6+ small meals']
+        )
+        breakfast_frequency = st.selectbox(
+            "How often do you eat breakfast?",
+            ['Never', 'Rarely (1-2 times/week)', 'Sometimes (3-4 times/week)', 
+             'Often (5-6 times/week)', 'Daily']
+        )
+        breakfast_types = st.multiselect(
+            "What do you typically have for breakfast?",
+            ['Cereal/Oatmeal', 'Eggs', 'Toast/Bread', 'Fruit', 'Yogurt', 
+             'Coffee only', 'Smoothie', 'Nothing', 'Other']
+        )
+    
+    with col2:
+        protein_sources = st.multiselect(
+            "What protein sources do you regularly consume?",
+            ['Chicken', 'Fish', 'Red meat', 'Beans/Legumes', 'Nuts/Seeds', 
+             'Eggs', 'Dairy products', 'Tofu/Soy', 'Protein supplements']
+        )
+        vegetable_servings = st.selectbox(
+            "How many servings of vegetables do you eat daily?",
+            ['Less than 1', '1-2 servings', '3-4 servings', '5+ servings']
+        )
+        water_intake = st.selectbox(
+            "How many glasses of water do you drink daily?",
+            ['Less than 4', '4-6 glasses', '6-8 glasses', 'More than 8 glasses']
+        )
+    
+    # Additional nutrition questions
+    snacking_habits = st.multiselect(
+        "What are your snacking habits?",
+        ['Healthy snacks (fruits, nuts)', 'Processed snacks (chips, cookies)', 
+         'Sweet treats', 'No snacking', 'Emotional eating']
+    )
+    
+    eating_out = st.selectbox(
+        "How often do you eat out or order takeout?",
+        ['Never', '1-2 times/week', '3-4 times/week', '5+ times/week']
+    )
+    
+    if st.button("Save Nutrition Information", key="save_nutrition"):
+        st.session_state.lifestyle_quiz.update({
+            'meals_per_day': meals_per_day,
+            'breakfast_frequency': breakfast_frequency,
+            'breakfast_types': breakfast_types,
+            'protein_sources': protein_sources,
+            'vegetable_servings': vegetable_servings,
+            'water_intake': water_intake,
+            'snacking_habits': snacking_habits,
+            'eating_out': eating_out,
+            'nutrition_completed': True
+        })
+        st.success("✅ Nutrition information saved!")
+
+def show_medication_quiz():
+    """Medication habits and health awareness quiz"""
+    st.subheader("💊 Medication & Health Management")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        medication_adherence = st.select_slider(
+            "How often do you take medications as prescribed?",
+            options=['Never', 'Rarely', 'Sometimes', 'Usually', 'Always'],
+            value='Usually'
+        )
+        medication_reminders = st.selectbox(
+            "Do you use reminders for medications?",
+            ['No reminders needed', 'Phone alarms', 'Pill organizer', 'App reminders', 'Family/caregiver help']
+        )
+        side_effects_awareness = st.selectbox(
+            "Are you aware of your medication side effects?",
+            ['Not aware', 'Somewhat aware', 'Very aware', 'N/A - No medications']
+        )
+    
+    with col2:
+        health_monitoring = st.multiselect(
+            "What health metrics do you regularly monitor?",
+            ['Blood pressure', 'Blood sugar', 'Weight', 'Heart rate', 
+             'Cholesterol', 'None', 'Other']
+        )
+        doctor_visits = st.selectbox(
+            "How often do you visit your doctor?",
+            ['Only when sick', 'Once a year', 'Twice a year', 'Quarterly', 'Monthly']
+        )
+        supplement_use = st.multiselect(
+            "What supplements do you take?",
+            ['Multivitamin', 'Vitamin D', 'Vitamin C', 'Omega-3', 'Probiotics', 
+             'Calcium', 'Iron', 'None', 'Other']
+        )
+    
+    if st.button("Save Medication Information", key="save_medication"):
+        st.session_state.lifestyle_quiz.update({
+            'medication_adherence': medication_adherence,
+            'medication_reminders': medication_reminders,
+            'side_effects_awareness': side_effects_awareness,
+            'health_monitoring': health_monitoring,
+            'doctor_visits': doctor_visits,
+            'supplement_use': supplement_use,
+            'medications_completed': True
+        })
+        st.success("✅ Medication information saved!")
+
+def show_lifestyle_recommendations():
+    """Generate and display personalized lifestyle recommendations"""
+    st.subheader("🎯 Your Personalized Health Recommendations")
+    
+    quiz_data = st.session_state.lifestyle_quiz
+    
+    # Calculate overall health score
+    health_score = calculate_lifestyle_score(quiz_data)
+    
+    # Display health score
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        score_color = "#4CAF50" if health_score >= 80 else "#FF9800" if health_score >= 60 else "#F44336"
+        st.markdown(f"""
+        <div style='background: {score_color}; padding: 1rem; border-radius: 10px; text-align: center; color: white;'>
+            <h2 style='margin: 0; font-size: 2rem;'>🌟</h2>
+            <h1 style='margin: 0.5rem 0 0 0; font-size: 2.5rem;'>{health_score}</h1>
+            <p style='margin: 0; opacity: 0.8;'>Overall Lifestyle Score</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        priority_areas = get_priority_improvement_areas(quiz_data)
+        st.markdown(f"""
+        <div style='background: #2196F3; padding: 1rem; border-radius: 10px; text-align: center; color: white;'>
+            <h2 style='margin: 0; font-size: 2rem;'>🎯</h2>
+            <h1 style='margin: 0.5rem 0 0 0; font-size: 1.5rem;'>{len(priority_areas)}</h1>
+            <p style='margin: 0; opacity: 0.8;'>Priority Areas</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col3:
+        strengths = get_lifestyle_strengths(quiz_data)
+        st.markdown(f"""
+        <div style='background: #9C27B0; padding: 1rem; border-radius: 10px; text-align: center; color: white;'>
+            <h2 style='margin: 0; font-size: 2rem;'>💪</h2>
+            <h1 style='margin: 0.5rem 0 0 0; font-size: 1.5rem;'>{len(strengths)}</h1>
+            <p style='margin: 0; opacity: 0.8;'>Strong Areas</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Detailed recommendations
+    st.markdown("---")
+    
+    # Priority improvements
+    if priority_areas:
+        st.subheader("🚀 Priority Improvements")
+        for area in priority_areas:
+            with st.expander(f"🎯 {area['title']}", expanded=True):
+                st.write(f"**Current Status:** {area['status']}")
+                st.write(f"**Recommendation:** {area['recommendation']}")
+                st.write(f"**Benefits:** {area['benefits']}")
+                
+                # Action steps
+                st.write("**Action Steps:**")
+                for step in area['action_steps']:
+                    st.write(f"• {step}")
+    
+    # Strengths to maintain
+    if strengths:
+        st.subheader("💪 Keep Up the Good Work")
+        for strength in strengths:
+            st.success(f"✅ **{strength['area']}**: {strength['message']}")
+    
+    # Weekly action plan
+    st.subheader("📅 Your Weekly Action Plan")
+    action_plan = generate_weekly_action_plan(quiz_data)
+    
+    for day, actions in action_plan.items():
+        with st.expander(f"📅 {day}", expanded=False):
+            for action in actions:
+                st.write(f"• {action}")
+
+def calculate_lifestyle_score(quiz_data):
+    """Calculate overall lifestyle score based on quiz responses"""
+    score = 0
+    total_categories = 5
+    
+    # Sleep score (20 points)
+    sleep_score = 0
+    if quiz_data.get('sleep_quality') in ['Good', 'Excellent']:
+        sleep_score += 15
+    elif quiz_data.get('sleep_quality') == 'Average':
+        sleep_score += 10
+    
+    if not quiz_data.get('sleep_issues') or 'None' in quiz_data.get('sleep_issues', []):
+        sleep_score += 5
+    
+    # Exercise score (20 points)
+    exercise_score = 0
+    freq_map = {'Daily': 15, '5-6 times': 12, '3-4 times': 8, '1-2 times': 4, 'Never': 0}
+    exercise_score += freq_map.get(quiz_data.get('exercise_frequency', 'Never'), 0)
+    
+    if quiz_data.get('daily_steps') in ['8,000-10,000', 'More than 10,000']:
+        exercise_score += 5
+    
+    # Nutrition score (20 points)
+    nutrition_score = 0
+    if quiz_data.get('breakfast_frequency') in ['Often (5-6 times/week)', 'Daily']:
+        nutrition_score += 5
+    if quiz_data.get('vegetable_servings') in ['3-4 servings', '5+ servings']:
+        nutrition_score += 5
+    if quiz_data.get('water_intake') in ['6-8 glasses', 'More than 8 glasses']:
+        nutrition_score += 5
+    if len(quiz_data.get('protein_sources', [])) >= 3:
+        nutrition_score += 5
+    
+    # Work/Stress score (20 points)
+    stress_score = 0
+    if quiz_data.get('stress_level') in ['Very Low', 'Low']:
+        stress_score += 10
+    elif quiz_data.get('stress_level') == 'Moderate':
+        stress_score += 6
+    
+    if quiz_data.get('relaxation_activities') and len(quiz_data.get('relaxation_activities', [])) >= 2:
+        stress_score += 5
+    
+    if quiz_data.get('work_satisfaction') in ['Satisfied', 'Very Satisfied']:
+        stress_score += 5
+    
+    # Medication/Health score (20 points)
+    med_score = 0
+    if quiz_data.get('medication_adherence') in ['Usually', 'Always']:
+        med_score += 10
+    if quiz_data.get('doctor_visits') in ['Once a year', 'Twice a year', 'Quarterly']:
+        med_score += 5
+    if quiz_data.get('health_monitoring') and len(quiz_data.get('health_monitoring', [])) >= 2:
+        med_score += 5
+    
+    total_score = sleep_score + exercise_score + nutrition_score + stress_score + med_score
+    return min(100, total_score)
+
+def get_priority_improvement_areas(quiz_data):
+    """Identify areas that need the most improvement"""
+    improvements = []
+    
+    # Sleep improvements
+    if quiz_data.get('sleep_quality') in ['Very Poor', 'Poor']:
+        improvements.append({
+            'title': 'Sleep Quality Enhancement',
+            'status': f"Current quality: {quiz_data.get('sleep_quality', 'Unknown')}",
+            'recommendation': 'Improve sleep hygiene and establish a consistent bedtime routine',
+            'benefits': 'Better mood, improved memory, stronger immune system, better weight management',
+            'action_steps': [
+                'Set a consistent bedtime and wake time',
+                'Create a relaxing bedtime routine',
+                'Avoid screens 1 hour before bed',
+                'Keep bedroom cool, dark, and quiet'
+            ]
+        })
+    
+    # Exercise improvements
+    if quiz_data.get('exercise_frequency') in ['Never', '1-2 times']:
+        improvements.append({
+            'title': 'Increase Physical Activity',
+            'status': f"Current frequency: {quiz_data.get('exercise_frequency', 'Unknown')}",
+            'recommendation': 'Start with 150 minutes of moderate exercise per week',
+            'benefits': 'Improved cardiovascular health, better mood, increased energy, weight management',
+            'action_steps': [
+                'Start with 10-minute daily walks',
+                'Take stairs instead of elevators',
+                'Park farther away from destinations',
+                'Try bodyweight exercises at home'
+            ]
+        })
+    
+    # Nutrition improvements
+    if quiz_data.get('breakfast_frequency') in ['Never', 'Rarely (1-2 times/week)']:
+        improvements.append({
+            'title': 'Establish Regular Breakfast Habit',
+            'status': f"Current frequency: {quiz_data.get('breakfast_frequency', 'Unknown')}",
+            'recommendation': 'Eat a nutritious breakfast daily to jumpstart metabolism',
+            'benefits': 'Better energy levels, improved concentration, better weight management',
+            'action_steps': [
+                'Prepare breakfast the night before',
+                'Start with simple options like oatmeal or yogurt',
+                'Include protein in every breakfast',
+                'Set a morning alarm for breakfast time'
+            ]
+        })
+    
+    # Stress management
+    if quiz_data.get('stress_level') in ['High', 'Very High']:
+        improvements.append({
+            'title': 'Stress Management',
+            'status': f"Current stress level: {quiz_data.get('stress_level', 'Unknown')}",
+            'recommendation': 'Implement daily stress reduction techniques',
+            'benefits': 'Lower blood pressure, better sleep, improved immune function, better mood',
+            'action_steps': [
+                'Practice 5 minutes of deep breathing daily',
+                'Try meditation apps like Headspace or Calm',
+                'Schedule regular breaks during work',
+                'Consider talking to a counselor'
+            ]
+        })
+    
+    return improvements[:3]  # Return top 3 priority areas
+
+def get_lifestyle_strengths(quiz_data):
+    """Identify user's lifestyle strengths"""
+    strengths = []
+    
+    if quiz_data.get('sleep_quality') in ['Good', 'Excellent']:
+        strengths.append({
+            'area': 'Sleep Quality',
+            'message': 'You have excellent sleep habits! Continue maintaining your sleep routine.'
+        })
+    
+    if quiz_data.get('exercise_frequency') in ['5-6 times', 'Daily']:
+        strengths.append({
+            'area': 'Physical Activity',
+            'message': 'Great job staying active! Your exercise routine is excellent.'
+        })
+    
+    if quiz_data.get('vegetable_servings') in ['3-4 servings', '5+ servings']:
+        strengths.append({
+            'area': 'Vegetable Intake',
+            'message': 'Excellent vegetable consumption! You\'re getting great nutrition.'
+        })
+    
+    if quiz_data.get('water_intake') in ['6-8 glasses', 'More than 8 glasses']:
+        strengths.append({
+            'area': 'Hydration',
+            'message': 'Perfect hydration levels! Keep up the great water intake.'
+        })
+    
+    if quiz_data.get('stress_level') in ['Very Low', 'Low']:
+        strengths.append({
+            'area': 'Stress Management',
+            'message': 'Excellent stress management! You\'re handling stress very well.'
+        })
+    
+    return strengths
+
+def generate_weekly_action_plan(quiz_data):
+    """Generate a personalized weekly action plan"""
+    plan = {
+        'Monday': ['Set weekly health goals', 'Meal prep for the week'],
+        'Tuesday': ['30-minute walk or exercise', 'Practice 5 minutes of meditation'],
+        'Wednesday': ['Try a new healthy recipe', 'Take work breaks every 2 hours'],
+        'Thursday': ['Physical activity of choice', 'Drink extra water throughout the day'],
+        'Friday': ['Review weekly health progress', 'Plan weekend activities'],
+        'Saturday': ['Longer physical activity (hiking, sports)', 'Prepare healthy meals'],
+        'Sunday': ['Relax and practice self-care', 'Plan next week\'s health goals']
+    }
+    
+    # Customize based on quiz responses
+    if quiz_data.get('exercise_frequency') == 'Never':
+        for day in ['Tuesday', 'Thursday', 'Saturday']:
+            plan[day] = ['Start with 10-minute walk'] + plan[day][1:]
+    
+    if quiz_data.get('stress_level') in ['High', 'Very High']:
+        for day in plan.keys():
+            plan[day].append('Practice stress reduction technique')
+    
+    return plan
 
 if __name__ == "__main__":
     main()
