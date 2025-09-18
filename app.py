@@ -62,7 +62,7 @@ def main():
             'dashboard': '📊 Dashboard',
             'upload': '📋 Report Analysis',
             'summary': '📈 Report Summary',
-            'prescription': '💊 Prescription Manager',
+            'prescription': '💊 Medication Manager',
             'assistant': '🤖 Query Assistant',
             'history': '📚 Health History'
         }
@@ -210,9 +210,9 @@ def process_ai_question(question):
             if report['concerns']:
                 context += f"Concerns: {', '.join(report['concerns'])}\n"
     
-    # Add prescription context
+    # Add medication context
     if st.session_state.prescriptions:
-        context += "\nCurrent Prescriptions:\n"
+        context += "\nCurrent Medications:\n"
         for prescription in st.session_state.prescriptions:
             context += f"- {prescription['medicine_name']} ({prescription['dosage']}, {prescription['frequency']})\n"
     
@@ -232,7 +232,7 @@ def process_ai_question(question):
         4. Questions to ask their doctor about alternatives
         5. Important warnings about drug interactions
         
-        Context from user's reports and prescriptions:
+        Context from user's reports and medications:
         {context}
         
         Always emphasize safety and professional medical consultation."""
@@ -895,7 +895,7 @@ def show_assistant_page():
         
         quick_questions = [
             ("📊 What are my latest health metrics?", "What are my latest health metrics and how do they compare to normal ranges?"),
-            ("💊 Alternative medicine options", "What are safe alternative medicine options for my current prescriptions? Include generic alternatives and natural supplements."),
+            ("💊 Alternative medicine options", "What are safe alternative medicine options for my current medications? Include generic alternatives and natural supplements."),
             ("⚠️ Drug interactions check", "Are there any potential interactions between my current medications? What should I watch for?"),
             ("💰 Cost-saving medication tips", "How can I save money on my medications? Are there generic alternatives or patient assistance programs?"),
             ("🌿 Natural alternatives to medications", "What natural supplements or lifestyle changes could complement or potentially replace some of my current medications?"),
@@ -1028,12 +1028,12 @@ def show_history_page():
 
 def show_prescription_page():
     """Prescription management page with comprehensive features"""
-    st.title("💊 Prescription Manager")
+    st.title("💊 Medication Manager")
     st.markdown("Manage your medications, find nearby pharmacies, and get AI-powered medical insights")
     
     # Create tabs for different features
     tab1, tab2, tab3, tab4 = st.tabs([
-        "📋 My Prescriptions", 
+        "📋 My Medications", 
         "🏪 Find Pharmacies", 
         "✉️ Email Suggestions", 
         "👨‍⚕️ Book Appointment"
@@ -1053,10 +1053,10 @@ def show_prescription_page():
 
 def show_prescription_management():
     """Prescription management interface"""
-    st.header("📋 Your Prescriptions")
+    st.header("📋 Your Medications")
     
     # Add new prescription
-    with st.expander("➕ Add New Prescription", expanded=True):
+    with st.expander("➕ Add Prescribed Medication", expanded=True):
         col1, col2 = st.columns(2)
         
         with col1:
@@ -1097,7 +1097,7 @@ def show_prescription_management():
                 help="Additional information about this medication"
             )
         
-        if st.button("💊 Add Prescription", type="primary"):
+        if st.button("💊 Add Medication", type="primary"):
             if medicine_name:
                 # Get medicine info from DailyMed
                 medicine_info = get_dailymed_info(medicine_name)
@@ -1115,14 +1115,14 @@ def show_prescription_management():
                 }
                 
                 st.session_state.prescriptions.append(prescription)
-                st.success(f"✅ Added {medicine_name} to your prescriptions!")
+                st.success(f"✅ Added {medicine_name} to your medications!")
                 st.rerun()
             else:
                 st.error("Please enter a medicine name")
     
     # Display current prescriptions
     if st.session_state.prescriptions:
-        st.header("📊 Current Prescriptions")
+        st.header("📊 Current Medications")
         
         for i, prescription in enumerate(st.session_state.prescriptions):
             with st.expander(f"💊 {prescription['medicine_name']} - {prescription['dosage']}", expanded=False):
@@ -1150,14 +1150,14 @@ def show_prescription_management():
                 with col3:
                     if st.button(f"🗑️ Remove", key=f"remove_{i}"):
                         st.session_state.prescriptions.pop(i)
-                        st.success("Prescription removed!")
+                        st.success("Medication removed!")
                         st.rerun()
                     
                     if st.button(f"📧 Email Info", key=f"email_{i}"):
                         st.session_state.selected_prescription = prescription
-                        st.info("Switch to Email Suggestions tab to send this prescription info!")
+                        st.info("Switch to Email Suggestions tab to send this medication info!")
     else:
-        st.info("No prescriptions added yet. Add your first prescription above!")
+        st.info("No medications added yet. Add your first medication above!")
 
 def show_pharmacy_locator():
     """Pharmacy locator with geolocation"""
@@ -1214,11 +1214,11 @@ def show_pharmacy_locator():
                 st.warning("No pharmacies found in your area. Try a different location.")
 
 def show_email_suggestions():
-    """Email prescription suggestions"""
-    st.header("✉️ Email Prescription Suggestions")
+    """Email medication suggestions"""
+    st.header("✉️ Email Medication Suggestions")
     
     if not st.session_state.prescriptions:
-        st.info("Add some prescriptions first to email suggestions!")
+        st.info("Add some medications first to email suggestions!")
         return
     
     # Email configuration
@@ -1229,12 +1229,12 @@ def show_email_suggestions():
             recipient_email = st.text_input(
                 "Recipient Email",
                 placeholder="doctor@example.com or patient@email.com",
-                help="Email address to send prescription information"
+                help="Email address to send medication information"
             )
             
             email_type = st.selectbox(
                 "Email Type",
-                ["Prescription Summary", "Alternative Medicine Suggestions", "Drug Interaction Alert", "Refill Reminder"]
+                ["Medication Summary", "Alternative Medicine Suggestions", "Drug Interaction Alert", "Refill Reminder"]
             )
         
         with col2:
@@ -1251,7 +1251,7 @@ def show_email_suggestions():
             )
     
     # Select prescriptions to include
-    st.subheader("📋 Select Prescriptions to Include")
+    st.subheader("📋 Select Medications to Include")
     
     selected_prescriptions = []
     for i, prescription in enumerate(st.session_state.prescriptions):
@@ -1280,7 +1280,7 @@ def show_email_suggestions():
                 st.download_button(
                     label="📥 Download Email",
                     data=email_content,
-                    file_name=f"prescription_email_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
+                    file_name=f"medication_email_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
                     mime="text/plain"
                 )
 
@@ -1295,7 +1295,7 @@ def show_appointment_booking():
         with col1:
             appointment_type = st.selectbox(
                 "Appointment Type",
-                ["General Consultation", "Follow-up Visit", "Prescription Review", 
+                ["General Consultation", "Follow-up Visit", "Medication Review", 
                  "Specialist Referral", "Urgent Care", "Telemedicine"]
             )
             
@@ -1338,8 +1338,8 @@ def show_appointment_booking():
         # Related prescriptions
         related_prescriptions = []
         if st.session_state.prescriptions:
-            st.subheader("💊 Related Prescriptions")
-            st.write("Select prescriptions to discuss during the appointment:")
+            st.subheader("💊 Related Medications")
+            st.write("Select medications to discuss during the appointment:")
             
             for i, prescription in enumerate(st.session_state.prescriptions):
                 if st.checkbox(
@@ -1359,7 +1359,7 @@ def show_appointment_booking():
                     'urgency': urgency,
                     'contact': contact_number,
                     'reason': reason_for_visit,
-                    'related_prescriptions': [p['medicine_name'] for p in related_prescriptions],
+                    'related_medications': [p['medicine_name'] for p in related_prescriptions],
                     'status': 'Pending',
                     'requested_at': datetime.now().strftime('%Y-%m-%d %H:%M EST')
                 }
@@ -1426,8 +1426,8 @@ def show_appointment_booking():
                 if appointment.get('reason'):
                     st.write(f"**Reason:** {appointment['reason']}")
                 
-                if appointment.get('related_prescriptions'):
-                    st.write(f"**Related Prescriptions:** {', '.join(appointment['related_prescriptions'])}")
+                if appointment.get('related_medications'):
+                    st.write(f"**Related Medications:** {', '.join(appointment['related_medications'])}")
 
 def get_dailymed_info(medicine_name):
     """Get medicine information from DailyMed API"""
@@ -1521,7 +1521,7 @@ def find_nearby_pharmacies(location):
         return []
 
 def generate_prescription_email(prescriptions, email_type, sender_name, include_alternatives=True):
-    """Generate email content for prescription information"""
+    """Generate email content for medication information"""
     
     est_tz = pytz.timezone('US/Eastern')
     current_time = datetime.now(est_tz).strftime('%B %d, %Y at %I:%M %p EST')
@@ -1531,12 +1531,12 @@ Subject: {email_type} - Generated by Smart Medi Assist AI
 
 Dear Healthcare Provider,
 
-I hope this email finds you well. I am writing to share my current prescription information as managed through Smart Medi Assist AI.
+I hope this email finds you well. I am writing to share my current medication information as managed through Smart Medi Assist AI.
 
 {email_type.upper()}
 Generated on: {current_time}
 
-CURRENT PRESCRIPTIONS:
+CURRENT MEDICATIONS:
 """
     
     for i, prescription in enumerate(prescriptions, 1):
@@ -1558,7 +1558,7 @@ CURRENT PRESCRIPTIONS:
         email_content += """
 
 AI-GENERATED ALTERNATIVE SUGGESTIONS:
-Based on the current prescriptions and health data analysis, here are some potential alternatives to discuss:
+Based on the current medications and health data analysis, here are some potential alternatives to discuss:
 
 • Generic equivalents may be available for cost savings
 • Natural supplements could complement current treatments
