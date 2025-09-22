@@ -40,9 +40,5 @@ externalPort = 80
 localPort = 38337
 externalPort = 3000
 
-[[ports]]
-localPort = 38443
-externalPort = 3001
-
 [agent]
 integrations = ["python_sendgrid:1.0.0"]
