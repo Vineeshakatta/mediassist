@@ -2,9 +2,11 @@ import streamlit as st
 import os
 from health_analyzer import HealthAnalyzer
 from file_processor import FileProcessor
+from auth_manager import AuthManager
+from health_tracker import HealthTracker
 import tempfile
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 import pytz
 import requests
@@ -21,6 +23,24 @@ st.set_page_config(
 )
 
 def main():
+    # Initialize authentication manager
+    if 'auth_manager' not in st.session_state:
+        st.session_state.auth_manager = AuthManager()
+    if 'health_tracker' not in st.session_state:
+        st.session_state.health_tracker = HealthTracker()
+    if 'authenticated' not in st.session_state:
+        st.session_state.authenticated = False
+    if 'current_user' not in st.session_state:
+        st.session_state.current_user = None
+    
+    # Check authentication first
+    if not st.session_state.authenticated:
+        show_login_page()
+        return
+    
+    # Load user-specific data
+    load_user_data()
+    
     # Initialize session state with persistence keys
     if 'current_page' not in st.session_state:
         st.session_state.current_page = 'dashboard'
@@ -65,12 +85,26 @@ def main():
         """, unsafe_allow_html=True)
         st.markdown("---")
         
+        # Show user info and logout
+        user_data = st.session_state.auth_manager.get_user(st.session_state.current_user)
+        st.markdown(f"**👤 {user_data['name']}** ({user_data['role'].title()})")
+        
+        if st.button("🚪 Logout", use_container_width=True):
+            save_user_data()
+            st.session_state.authenticated = False
+            st.session_state.current_user = None
+            st.rerun()
+        
+        st.markdown("---")
+        
         # Navigation Menu with icons
         pages = {
             'dashboard': '📊 Dashboard',
             'upload': '📋 Report Analysis',
             'summary': '📈 Report Summary',
             'prescription': '💊 Medication Manager',
+            'health_tracking': '📅 Health Tracking',
+            'family': '👨‍👩‍👧‍👦 Family Members',
             'appointments': '🏥 Doctor Appointments',
             'lifestyle': '🌱 Lifestyle Quiz',
             'assistant': '🤖 Query Assistant',
@@ -152,6 +186,10 @@ def main():
         show_summary_page()
     elif st.session_state.current_page == 'prescription':
         show_prescription_page()
+    elif st.session_state.current_page == 'health_tracking':
+        show_health_tracking_page()
+    elif st.session_state.current_page == 'family':
+        show_family_page()
     elif st.session_state.current_page == 'assistant':
         show_assistant_page()
     elif st.session_state.current_page == 'appointments':
@@ -2436,6 +2474,385 @@ def generate_weekly_action_plan(quiz_data):
             plan[day].append('Practice stress reduction technique')
     
     return plan
+
+def show_login_page():
+    """Login and signup page"""
+    st.markdown("""
+    <div style='text-align: center; padding: 2rem 0;'>
+        <h1 style='color: #1f77b4;'>🩺 Smart Medi Assist AI</h1>
+        <p style='color: #666; font-size: 1.2rem;'>Healthcare Intelligence Platform for Families</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    tab1, tab2 = st.tabs(["🔐 Login", "📝 Sign Up"])
+    
+    with tab1:
+        st.subheader("Welcome Back!")
+        with st.form("login_form"):
+            username = st.text_input("Username", placeholder="Enter your username")
+            password = st.text_input("Password", placeholder="Enter your password", type="password")
+            submit = st.form_submit_button("🔐 Login", use_container_width=True)
+            
+            if submit:
+                success, user_data = st.session_state.auth_manager.authenticate(username, password)
+                if success:
+                    st.session_state.authenticated = True
+                    st.session_state.current_user = username
+                    st.success(f"Welcome back, {user_data['name']}!")
+                    st.rerun()
+                else:
+                    st.error("Invalid username or password")
+    
+    with tab2:
+        st.subheader("Create Your Family Account")
+        with st.form("signup_form"):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                new_username = st.text_input("Username*", placeholder="Choose a username")
+                new_name = st.text_input("Full Name*", placeholder="Your full name")
+                role = st.selectbox("Role", ["Admin (Parent/Caregiver)", "Member (Family Member)"])
+            
+            with col2:
+                new_password = st.text_input("Password*", placeholder="Choose a password", type="password")
+                confirm_password = st.text_input("Confirm Password*", placeholder="Re-enter password", type="password")
+                family_code = st.text_input("Family Code (optional)", placeholder="Enter family code to join existing family")
+            
+            signup = st.form_submit_button("📝 Create Account", use_container_width=True)
+            
+            if signup:
+                if not new_username or not new_password or not new_name:
+                    st.error("Please fill in all required fields")
+                elif new_password != confirm_password:
+                    st.error("Passwords do not match")
+                else:
+                    user_role = "admin" if "Admin" in role else "member"
+                    success, message = st.session_state.auth_manager.create_user(
+                        new_username, new_password, new_name, user_role, family_code or None
+                    )
+                    
+                    if success:
+                        st.success(f"Account created successfully! Please login.")
+                        user_data = st.session_state.auth_manager.get_user(new_username)
+                        if not family_code:
+                            st.info(f"Your family code is: **{user_data['family_id']}**. Share this with family members to join.")
+                    else:
+                        st.error(message)
+
+def load_user_data():
+    """Load user-specific health data from auth manager"""
+    username = st.session_state.current_user
+    if username:
+        health_data = st.session_state.auth_manager.get_user_health_data(username)
+        if health_data:
+            st.session_state.reports_history = health_data.get('reports', [])
+            st.session_state.prescriptions = health_data.get('prescriptions', [])
+            st.session_state.appointments = health_data.get('appointments', [])
+
+def save_user_data():
+    """Save user-specific health data to auth manager"""
+    username = st.session_state.current_user
+    if username:
+        health_data = {
+            'reports': st.session_state.get('reports_history', []),
+            'prescriptions': st.session_state.get('prescriptions', []),
+            'appointments': st.session_state.get('appointments', [])
+        }
+        st.session_state.auth_manager.update_user_health_data(username, health_data)
+
+def show_health_tracking_page():
+    """Health tracking page with medication reminders, goals, and symptom tracker"""
+    st.title("📅 Smart Health Tracking")
+    st.markdown("Track your medications, set health goals, and monitor symptoms")
+    
+    tab1, tab2, tab3 = st.tabs(["💊 Medication Reminders", "🎯 Health Goals", "🩺 Symptom Tracker"])
+    
+    with tab1:
+        show_medication_reminders()
+    
+    with tab2:
+        show_health_goals()
+    
+    with tab3:
+        show_symptom_tracker()
+
+def show_medication_reminders():
+    """Medication reminder system"""
+    st.header("💊 Medication Reminders")
+    
+    st.info("📱 **Note:** Medication reminders are stored in your profile. For actual push notifications, enable browser notifications or use the mobile app (feature in development).")
+    
+    username = st.session_state.current_user
+    reminders = st.session_state.auth_manager.get_user_health_data(username, 'medication_reminders') or []
+    
+    # Add new reminder
+    with st.expander("➕ Set New Medication Reminder", expanded=True):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            med_name = st.text_input("Medication Name", placeholder="e.g., Aspirin")
+            dosage = st.text_input("Dosage", placeholder="e.g., 5mg")
+            frequency = st.selectbox("Frequency", ["Once daily", "Twice daily", "Three times daily", "As needed"])
+        
+        with col2:
+            reminder_times = st.multiselect(
+                "Reminder Times",
+                ["8:00 AM", "12:00 PM", "4:00 PM", "8:00 PM", "10:00 PM"],
+                default=["8:00 AM"]
+            )
+            start_date = st.date_input("Start Date", value=datetime.now().date())
+            end_date = st.date_input("End Date (optional)", value=None)
+        
+        if st.button("💊 Set Reminder", type="primary"):
+            if med_name and dosage:
+                reminder = st.session_state.health_tracker.create_medication_reminder(
+                    med_name, dosage, frequency, reminder_times, 
+                    start_date.strftime('%Y-%m-%d'),
+                    end_date.strftime('%Y-%m-%d') if end_date else None
+                )
+                st.session_state.auth_manager.add_health_data(username, 'medication_reminders', reminder)
+                save_user_data()  # Save immediately
+                st.success(f"✅ Reminder set for {med_name}!")
+                st.rerun()
+    
+    # Display active reminders
+    if reminders:
+        st.subheader("📋 Active Reminders")
+        for i, reminder in enumerate(reminders):
+            if reminder.get('active'):
+                with st.expander(f"💊 {reminder['medicine_name']} - {reminder['dosage']}", expanded=False):
+                    col1, col2, col3 = st.columns([2, 2, 1])
+                    
+                    with col1:
+                        st.write(f"**Frequency:** {reminder['frequency']}")
+                        st.write(f"**Times:** {', '.join(reminder['times'])}")
+                        st.write(f"**Start:** {reminder['start_date']}")
+                        if reminder.get('end_date'):
+                            st.write(f"**End:** {reminder['end_date']}")
+                    
+                    with col2:
+                        if reminder.get('history'):
+                            st.write(f"**Last Taken:** {reminder['history'][-1]['taken_at']}")
+                            st.write(f"**Total Doses:** {len(reminder['history'])}")
+                        else:
+                            st.write("**Status:** Not yet taken")
+                    
+                    with col3:
+                        if st.button("✅ Mark Taken", key=f"take_{i}"):
+                            st.session_state.health_tracker.log_medication_taken(reminder)
+                            save_user_data()  # Save immediately
+                            st.success("Logged!")
+                            st.rerun()
+                        
+                        if st.button("🗑️ Delete", key=f"del_rem_{i}"):
+                            reminder['active'] = False
+                            save_user_data()  # Save immediately
+                            st.success("Reminder removed!")
+                            st.rerun()
+    else:
+        st.info("No medication reminders set. Create one above!")
+
+def show_health_goals():
+    """Health goals tracking"""
+    st.header("🎯 Health Goals")
+    
+    username = st.session_state.current_user
+    goals = st.session_state.auth_manager.get_user_health_data(username, 'health_goals') or []
+    
+    # Add new goal
+    with st.expander("➕ Set New Health Goal", expanded=True):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            goal_type = st.selectbox(
+                "Goal Type",
+                ["Weight Loss", "Blood Pressure Reduction", "Cholesterol Reduction", 
+                 "Exercise Minutes", "Daily Steps", "Custom"]
+            )
+            current_val = st.number_input("Current Value", min_value=0.0, step=0.1)
+            target_val = st.number_input("Target Value", min_value=0.0, step=0.1)
+        
+        with col2:
+            target_date = st.date_input("Target Date", value=datetime.now().date() + timedelta(days=30))
+            notes = st.text_area("Notes", placeholder="Any additional notes...")
+        
+        if st.button("🎯 Set Goal", type="primary"):
+            if goal_type and current_val and target_val:
+                goal = st.session_state.health_tracker.create_health_goal(
+                    goal_type.lower().replace(' ', '_'),
+                    target_val, current_val,
+                    target_date.strftime('%Y-%m-%d'),
+                    notes
+                )
+                st.session_state.auth_manager.add_health_data(username, 'health_goals', goal)
+                save_user_data()  # Save immediately
+                st.success(f"✅ Goal set: {goal_type}!")
+                st.rerun()
+    
+    # Display goals
+    if goals:
+        st.subheader("📊 Your Goals")
+        for i, goal in enumerate(goals):
+            if goal['status'] == 'active' or goal['status'] == 'achieved':
+                status_icon = "🎉" if goal['status'] == 'achieved' else "🎯"
+                with st.expander(f"{status_icon} {goal['goal_type'].replace('_', ' ').title()}", expanded=False):
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.metric("Current", goal['current_value'])
+                        st.metric("Target", goal['target_value'])
+                        st.write(f"**Target Date:** {goal['target_date']}")
+                        if goal.get('notes'):
+                            st.write(f"**Notes:** {goal['notes']}")
+                    
+                    with col2:
+                        if goal.get('progress'):
+                            progress_df = pd.DataFrame(goal['progress'])
+                            st.line_chart(progress_df.set_index('date')['value'], height=200)
+                        
+                        new_value = st.number_input(f"Update Progress", min_value=0.0, step=0.1, key=f"goal_{i}")
+                        if st.button("📊 Log Progress", key=f"log_goal_{i}"):
+                            st.session_state.health_tracker.update_goal_progress(goal, new_value)
+                            save_user_data()  # Save immediately
+                            st.success("Progress updated!")
+                            st.rerun()
+    else:
+        st.info("No health goals set. Create one above!")
+
+def show_symptom_tracker():
+    """Symptom tracking and pattern analysis"""
+    st.header("🩺 Symptom Tracker")
+    
+    username = st.session_state.current_user
+    symptoms = st.session_state.auth_manager.get_user_health_data(username, 'symptoms') or []
+    
+    # Log new symptom
+    with st.expander("➕ Log New Symptom", expanded=True):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            symptom_name = st.text_input("Symptom", placeholder="e.g., Headache, Nausea")
+            severity = st.select_slider("Severity", options=["Mild", "Moderate", "Severe"])
+            duration = st.text_input("Duration", placeholder="e.g., 2 hours, all day")
+        
+        with col2:
+            description = st.text_area("Description", placeholder="Describe the symptom...")
+            triggers = st.text_input("Possible Triggers", placeholder="e.g., stress, food, weather")
+        
+        if st.button("🩺 Log Symptom", type="primary"):
+            if symptom_name:
+                symptom = st.session_state.health_tracker.log_symptom(
+                    symptom_name, severity.lower(), description, duration, triggers
+                )
+                st.session_state.auth_manager.add_health_data(username, 'symptoms', symptom)
+                save_user_data()  # Save immediately
+                st.success(f"✅ Logged symptom: {symptom_name}")
+                st.rerun()
+    
+    # Display symptoms and patterns
+    if symptoms:
+        st.subheader("📋 Symptom History")
+        
+        # Analyze patterns
+        analysis = st.session_state.health_tracker.analyze_symptom_patterns(symptoms)
+        
+        if analysis['insights']:
+            st.warning("⚠️ **AI Pattern Detection:**")
+            for insight in analysis['insights']:
+                st.write(f"• {insight}")
+            st.markdown("---")
+        
+        # Show recent symptoms
+        for symptom in reversed(symptoms[-10:]):  # Last 10 symptoms
+            severity_color = "🔴" if symptom['severity'] == 'severe' else "🟡" if symptom['severity'] == 'moderate' else "🟢"
+            with st.expander(f"{severity_color} {symptom['symptom_name']} - {symptom['logged_at']}", expanded=False):
+                st.write(f"**Severity:** {symptom['severity'].title()}")
+                if symptom.get('duration'):
+                    st.write(f"**Duration:** {symptom['duration']}")
+                if symptom.get('description'):
+                    st.write(f"**Description:** {symptom['description']}")
+                if symptom.get('triggers'):
+                    st.write(f"**Triggers:** {symptom['triggers']}")
+    else:
+        st.info("No symptoms logged yet. Track your symptoms above!")
+
+def show_family_page():
+    """Family member management page"""
+    st.title("👨‍👩‍👧‍👦 Family Members")
+    st.markdown("Manage your family's health profiles and access their data")
+    
+    username = st.session_state.current_user
+    user_data = st.session_state.auth_manager.get_user(username)
+    family_id = user_data['family_id']
+    is_admin = user_data['role'] == 'admin'
+    
+    # Display family code
+    st.info(f"**Your Family Code:** `{family_id}` - Share this with family members to join!")
+    
+    # Get all family members
+    family_members = st.session_state.auth_manager.get_family_members(family_id)
+    
+    # Add new family member (admin only)
+    if is_admin:
+        with st.expander("➕ Add Family Member", expanded=True):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                new_username = st.text_input("Username", placeholder="Choose username for family member")
+                new_name = st.text_input("Full Name", placeholder="Family member's name")
+                new_role = st.selectbox("Role", ["Member", "Admin"])
+            
+            with col2:
+                new_password = st.text_input("Password", placeholder="Set password", type="password")
+                relationship = st.text_input("Relationship", placeholder="e.g., Spouse, Child, Parent")
+            
+            if st.button("➕ Add Family Member", type="primary"):
+                if new_username and new_password and new_name:
+                    success, message = st.session_state.auth_manager.add_family_member(
+                        family_id, new_username, new_password, new_name, new_role.lower()
+                    )
+                    if success:
+                        save_user_data()  # Save immediately
+                        st.success(f"✅ Added {new_name} to family!")
+                        st.rerun()
+                    else:
+                        st.error(message)
+                else:
+                    st.error("Please fill in all fields")
+    
+    # Display family members
+    st.subheader("👥 Family Members")
+    
+    for member in family_members:
+        is_current = member['username'] == username
+        member_icon = "👤" if member['role'] == 'admin' else "👨‍👩‍👧"
+        current_badge = " (You)" if is_current else ""
+        
+        with st.expander(f"{member_icon} {member['name']}{current_badge} - {member['role'].title()}", expanded=False):
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                st.write(f"**Username:** {member['username']}")
+                st.write(f"**Role:** {member['role'].title()}")
+                
+                # Show health summary if available
+                member_health = st.session_state.auth_manager.get_user_health_data(member['username'])
+                if member_health:
+                    reports_count = len(member_health.get('reports', []))
+                    prescriptions_count = len(member_health.get('prescriptions', []))
+                    st.write(f"**Health Reports:** {reports_count}")
+                    st.write(f"**Prescriptions:** {prescriptions_count}")
+            
+            with col2:
+                if is_admin and not is_current:
+                    if st.button(f"👁️ View Profile", key=f"view_{member['username']}"):
+                        st.info("Profile viewing feature coming soon!")
+                        save_user_data()  # Save after any action
+                
+                if not is_current:
+                    st.write("**Quick Actions:**")
+                    st.write("• Send message")
+                    st.write("• Share report")
 
 if __name__ == "__main__":
     main()
