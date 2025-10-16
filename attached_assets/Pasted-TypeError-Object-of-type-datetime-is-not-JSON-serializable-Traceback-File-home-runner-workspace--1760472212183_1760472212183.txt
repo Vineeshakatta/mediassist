@@ -1,0 +1,37 @@
+TypeError: Object of type datetime is not JSON serializable
+Traceback:
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 128, in exec_func_with_error_handling
+    result = func()
+             ^^^^^^
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 669, in code_to_exec
+    exec(code, module.__dict__)  # noqa: S102
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File "/home/runner/workspace/app.py", line 2858, in <module>
+    main()
+File "/home/runner/workspace/app.py", line 93, in main
+    save_user_data()
+File "/home/runner/workspace/app.py", line 2561, in save_user_data
+    st.session_state.auth_manager.update_user_health_data(username, health_data)
+File "/home/runner/workspace/auth_manager.py", line 92, in update_user_health_data
+    self._save_users()
+File "/home/runner/workspace/auth_manager.py", line 26, in _save_users
+    json.dump(self.users, f, indent=2)
+File "/nix/store/7d088dip86hlzri9sk0h78b63yfmx0a0-python3-3.11.13/lib/python3.11/json/__init__.py", line 179, in dump
+    for chunk in iterable:
+File "/nix/store/7d088dip86hlzri9sk0h78b63yfmx0a0-python3-3.11.13/lib/python3.11/json/encoder.py", line 432, in _iterencode
+    yield from _iterencode_dict(o, _current_indent_level)
+File "/nix/store/7d088dip86hlzri9sk0h78b63yfmx0a0-python3-3.11.13/lib/python3.11/json/encoder.py", line 406, in _iterencode_dict
+    yield from chunks
+File "/nix/store/7d088dip86hlzri9sk0h78b63yfmx0a0-python3-3.11.13/lib/python3.11/json/encoder.py", line 406, in _iterencode_dict
+    yield from chunks
+File "/nix/store/7d088dip86hlzri9sk0h78b63yfmx0a0-python3-3.11.13/lib/python3.11/json/encoder.py", line 406, in _iterencode_dict
+    yield from chunks
+File "/nix/store/7d088dip86hlzri9sk0h78b63yfmx0a0-python3-3.11.13/lib/python3.11/json/encoder.py", line 326, in _iterencode_list
+    yield from chunks
+File "/nix/store/7d088dip86hlzri9sk0h78b63yfmx0a0-python3-3.11.13/lib/python3.11/json/encoder.py", line 406, in _iterencode_dict
+    yield from chunks
+File "/nix/store/7d088dip86hlzri9sk0h78b63yfmx0a0-python3-3.11.13/lib/python3.11/json/encoder.py", line 439, in _iterencode
+    o = _default(o)
+        ^^^^^^^^^^^
+File "/nix/store/7d088dip86hlzri9sk0h78b63yfmx0a0-python3-3.11.13/lib/python3.11/json/encoder.py", line 180, in default
+    raise TypeError(f'Object of type {o.__class__.__name__} '

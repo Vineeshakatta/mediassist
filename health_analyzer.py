@@ -14,6 +14,7 @@ class HealthAnalyzer:
             'blood_pressure': r'(?:blood pressure|BP)[\s:]*(\d{2,3})/(\d{2,3})',
             'cholesterol': r'(?:cholesterol|chol)[\s:]*(\d{1,3}(?:\.\d)?)',
             'glucose': r'(?:glucose|blood sugar|BS)[\s:]*(\d{1,3}(?:\.\d)?)',
+            'hemoglobin': r'(?:hemoglobin|hgb|hb)[\s:]*(\d{1,2}(?:\.\d)?)',
             'heart_rate': r'(?:heart rate|HR|pulse)[\s:]*(\d{2,3})',
             'temperature': r'(?:temperature|temp)[\s:]*(\d{2,3}(?:\.\d)?)',
             'weight': r'(?:weight|wt)[\s:]*(\d{2,3}(?:\.\d)?)',
@@ -82,6 +83,7 @@ class HealthAnalyzer:
         units = {
             'cholesterol': 'mg/dL',
             'glucose': 'mg/dL',
+            'hemoglobin': 'g/dL',
             'heart_rate': 'bpm',
             'temperature': '°F',
             'weight': 'lbs',
@@ -94,6 +96,7 @@ class HealthAnalyzer:
         ranges = {
             'cholesterol': '<200 mg/dL',
             'glucose': '70-100 mg/dL (fasting)',
+            'hemoglobin': '12.0-15.5 g/dL (women), 13.5-17.5 g/dL (men)',
             'heart_rate': '60-100 bpm',
             'temperature': '97-99°F',
             'weight': 'varies by individual',
